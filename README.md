@@ -4,9 +4,10 @@ A drag-and-drop WYSIWYG editor for [mermaid](https://mermaid.js.org) diagrams. C
 the left, live diagram on the right, tool picker on top. Runs entirely in the browser with no
 backend.
 
-**Status: early.** Milestones 1 to 3 work — a real code editor on the left, a pannable and
-zoomable diagram canvas on the right. None of the direct-manipulation editing exists yet:
-the diagram is still something you read, not something you edit. See [Roadmap](#roadmap).
+**Status: the hard part works.** Click a node in the diagram and the editor selects the text
+that declared it — the code-to-canvas correlation that the whole project depends on is real
+and passing tests. What is still missing is writing edits back the other way. See
+[Roadmap](#roadmap).
 
 ## Why this is not a whiteboard
 
@@ -46,6 +47,7 @@ bun run dev        # http://localhost:5173
 Other scripts:
 
 ```sh
+bun run test       # unit tests for the source-scanning logic
 bun run typecheck  # tsc --noEmit
 bun run build      # typecheck, then production build into dist/
 bun run preview    # serve the production build
@@ -66,10 +68,10 @@ Worth reaching early rather than late.
       cursor-anchored wheel zoom, and a floating toolbar island with zoom, fit, and reset.
       The island holds only controls that work — a shape/text tool picker would be dead
       buttons until milestones 5 and 6, so it lands with them.
-- [ ] **4. Selection — the viability gate.** Click a rendered node, resolve it to a range in
-      the source, highlight that range in the editor. Mapping the SVG element back to a
-      mermaid entity is already confirmed to work; mapping that entity to a *text span* is
-      the open problem, because mermaid's flowchart parser keeps no position information.
+- [x] **4. Selection — the viability gate, and it holds.** Click a rendered node and the
+      editor selects the text that declared it. Mermaid's flowchart parser keeps no source
+      positions, so `src/correlate.ts` recovers the spans by scanning the source directly.
+      It is a scanner, not a parser: it locates node declarations and nothing else.
 - [ ] **5. First mutation.** Rename a node label on the canvas and write a minimal edit back
       to the source, preserving all surrounding syntax.
 - [ ] **6. Drag as a structural edit.** Reorder siblings, reparent into a subgraph,

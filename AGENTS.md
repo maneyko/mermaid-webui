@@ -43,16 +43,20 @@ index.html
 src/main.tsx            React root
 src/App.tsx             owns the source string, nothing else
 src/CodePane.tsx        CodeMirror 6 editor, controlled
-src/Canvas.tsx          mermaid render, viewport, toolbar, error panel
+src/Canvas.tsx          mermaid render, viewport, selection, toolbar, error panel
+src/correlate.ts        source -> node spans, and rendered SVG id -> node id
+src/correlate.test.ts   bun test
 src/mermaidLanguage.ts  syntax highlighting tokenizer
 src/styles.css          all styling
 ```
 
-Flat on purpose. Planned split as milestone 4 approaches: a `src/mermaid/` directory for the
-pure functions (source -> entities plus text spans, SVG element -> entity, minimal text
-rewrites) separate from `src/ui/`. That half should be pure and unit-testable with
-`bun test`, because that is where the bugs will live. Do not do the split before there is
-something to put in it.
+Flat on purpose. `correlate.ts` is the pure half and the only part with tests, which is
+deliberate: it is where the bugs will live. Keep new pure logic there or beside it, and keep
+it free of DOM and React so it stays testable with `bun test`.
+
+`Canvas.tsx` is around 240 lines and now carries three concerns: rendering, the viewport, and
+selection. This is the point where pulling the viewport out into a `usePanZoom` hook stops
+being premature. Do it when the file next needs to grow, not as a standalone tidy-up.
 
 ## Mermaid facts worth not rediscovering
 
@@ -73,10 +77,23 @@ This is milestone 4's foundation. Half of it is solved:
   target node ids are right there in the attribute.
 - Nodes carry no `data-id` or `data-node-id`. The `id` attribute is the only handle.
 
-What is **not** solved: going from a mermaid entity id to a *source text span*. The flowchart
-parser keeps no position information, so `flowDb` cannot supply it. That needs either our own
-lexer or a scan for the id token in the source. Node ids are unique tokens, so a scan is
-tractable, but it needs designing rather than guessing.
+Going from an entity id to a *source text span* is solved in `src/correlate.ts`. The
+flowchart parser keeps no position information, so `flowDb` cannot supply it; `findNodes`
+scans the source instead and returns a span per node id, preferring the occurrence that
+carries a label. It is a scanner, not a parser — it locates node declarations and nothing
+else. Do not grow it into a parser without deciding that is what you want.
+
+Things the scanner gets right, all covered by `src/correlate.test.ts`:
+
+- `A-->B` ends the id at `A`. A hyphen only continues an id when a word character follows,
+  so `node-1` survives while arrow dashes do not get eaten.
+- Nested delimiters, so `A[[Subroutine]]` and `B((Circle))` match by depth.
+- Edge labels (`|Get money|`), comments (`%%`), quoted strings, and keywords are skipped.
+- An unterminated `A[Unclosed` falls back to the bare id rather than swallowing the file.
+
+Known gaps, none currently reachable from the UI: mermaid 11's `A@{ shape: rect }` syntax is
+not understood and leaves stray identifiers in the map, and subgraph ids get collected even
+though subgraphs render as `g.cluster` and so cannot be clicked.
 
 ### The parser situation
 
@@ -134,6 +151,30 @@ target for the Langium migration though, so this may change.
   managing the viewport. That is tolerable now. Milestone 4 adds selection to the same file,
   and that is the point at which pulling the viewport out into `usePanZoom` earns itself.
   Not before.
+
+### Selection
+
+Three things here were each found by a failed attempt, not by reasoning, so they are worth
+keeping:
+
+- **Selection fires on `click`, not `pointerup`.** Pointer capture is needed for panning, and
+  it retargets every pointer event at the capturing element, so `pointerup.target` is the
+  `<section>` rather than the node under the cursor. A plain `click` still reports the real
+  target. Panning sets a flag that the click handler consumes so a pan does not select.
+- **`.canvas` sets `user-select: none` permanently**, not just while panning. Dragging
+  otherwise sweeps a native text selection across the SVG labels, and because the editor's
+  highlight *is* the document selection, panning would wipe it.
+- **The selection ring needs `!important`.** Mermaid injects a stylesheet into every SVG it
+  renders, scoped by render id, so `#mermaid-7 .node polygon` outranks any selector we can
+  write against a class. This is the one place `!important` is correct.
+
+Re-rendering replaces the whole SVG, so the selection class is reapplied after every render.
+`Canvas` reads the current selection through a ref to keep the render effect keyed on
+`source` alone.
+
+Spans are offsets into a specific version of the text, so `App` clears the selection whenever
+the source changes. Any future feature that edits text while keeping a selection has to
+recompute the spans, not carry them across.
 
 ### Rendering
 

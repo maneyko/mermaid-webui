@@ -5,12 +5,18 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { mermaidLanguage } from './mermaidLanguage'
 
+export interface Range {
+  from: number
+  to: number
+}
+
 interface CodePaneProps {
   source: string
   onChange: (source: string) => void
+  reveal: Range | null
 }
 
-export default function CodePane({ source, onChange }: CodePaneProps) {
+export default function CodePane({ source, onChange, reveal }: CodePaneProps) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const latestOnChange = useRef(onChange)
@@ -57,6 +63,19 @@ export default function CodePane({ source, onChange }: CodePaneProps) {
 
     editor.dispatch({ changes: { from: 0, to: current.length, insert: source } })
   }, [source])
+
+  // Selecting the range is the highlight: it uses CodeMirror's own selection rendering
+  // rather than a decoration layer, and leaves the cursor somewhere useful for editing.
+  useEffect(() => {
+    const editor = view.current
+    if (editor === null || reveal === null) return
+
+    const end = editor.state.doc.length
+    if (reveal.from > end || reveal.to > end) return
+
+    editor.dispatch({ selection: { anchor: reveal.from, head: reveal.to }, scrollIntoView: true })
+    editor.focus()
+  }, [reveal])
 
   return <div className="code" ref={host} />
 }

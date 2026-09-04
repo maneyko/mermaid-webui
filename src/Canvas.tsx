@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
+import { nodeIdFromElement } from './correlate'
 
 // useMaxWidth would make mermaid size the SVG to its container, which fights a viewport that
 // does its own scaling. Fixed natural dimensions leave zoom entirely to our transform.
@@ -34,6 +35,13 @@ function clamp(value: number, low: number, high: number): number {
   return Math.min(Math.max(value, low), high)
 }
 
+function markSelected(container: HTMLDivElement | null, nodeId: string | null): void {
+  if (container === null) return
+  for (const node of container.querySelectorAll('g.node')) {
+    node.classList.toggle('selected', nodeIdFromElement(node) === nodeId)
+  }
+}
+
 // Keeps the content under (pointerX, pointerY) pinned while the scale changes. Both are
 // relative to the frame's centre, because that is the transform origin.
 function zoomAbout(view: Viewport, pointerX: number, pointerY: number, factor: number): Viewport {
@@ -46,17 +54,35 @@ function zoomAbout(view: Viewport, pointerX: number, pointerY: number, factor: n
   }
 }
 
+// Below this many pixels of pointer travel, a drag counts as a click rather than a pan.
+const CLICK_SLOP = 4
+
 interface CanvasProps {
   source: string
+  selected: string | null
+  onSelect: (nodeId: string | null) => void
 }
 
-export default function Canvas({ source }: CanvasProps) {
+export default function Canvas({ source, selected, onSelect }: CanvasProps) {
   const [view, setView] = useState<Viewport>(CENTERED)
   const [panning, setPanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const frame = useRef<HTMLDivElement>(null)
   const diagram = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ pointerId: number; x: number; y: number; from: Viewport } | null>(null)
+  const drag = useRef<{
+    pointerId: number
+    x: number
+    y: number
+    from: Viewport
+    moved: boolean
+  } | null>(null)
+  // A pan ends with a click event we do not want to treat as a selection.
+  const panEndedHere = useRef(false)
+
+  // Re-rendering replaces the whole SVG, so the selection has to be reapplied afterwards.
+  // Read through a ref to keep the render effect keyed on `source` alone.
+  const latestSelected = useRef(selected)
+  latestSelected.current = selected
 
   useEffect(() => {
     let stale = false
@@ -65,7 +91,10 @@ export default function Canvas({ source }: CanvasProps) {
       try {
         const { svg } = await mermaid.render(`mermaid-${++renderCount}`, source)
         if (stale) return
-        if (diagram.current !== null) diagram.current.innerHTML = svg
+        if (diagram.current !== null) {
+          diagram.current.innerHTML = svg
+          markSelected(diagram.current, latestSelected.current)
+        }
         setError(null)
       } catch (cause) {
         if (!stale) setError(cause instanceof Error ? cause.message : String(cause))
@@ -77,6 +106,10 @@ export default function Canvas({ source }: CanvasProps) {
       clearTimeout(timer)
     }
   }, [source])
+
+  useEffect(() => {
+    markSelected(diagram.current, selected)
+  }, [selected])
 
   // React's onWheel is passive, so preventDefault there would be ignored and the page would
   // scroll instead of the diagram zooming.
@@ -133,23 +166,45 @@ export default function Canvas({ source }: CanvasProps) {
       }}
       onPointerDown={(event) => {
         if (event.button !== 0) return
-        drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, from: view }
+        drag.current = {
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          from: view,
+          moved: false,
+        }
         event.currentTarget.setPointerCapture(event.pointerId)
-        setPanning(true)
       }}
       onPointerMove={(event) => {
         const active = drag.current
         if (active === null || active.pointerId !== event.pointerId) return
-        setView({
-          scale: active.from.scale,
-          x: active.from.x + (event.clientX - active.x),
-          y: active.from.y + (event.clientY - active.y),
-        })
+
+        const dx = event.clientX - active.x
+        const dy = event.clientY - active.y
+        if (!active.moved) {
+          if (Math.abs(dx) < CLICK_SLOP && Math.abs(dy) < CLICK_SLOP) return
+          active.moved = true
+          setPanning(true)
+        }
+
+        setView({ scale: active.from.scale, x: active.from.x + dx, y: active.from.y + dy })
       }}
       onPointerUp={(event) => {
-        if (drag.current?.pointerId !== event.pointerId) return
+        const active = drag.current
+        if (active?.pointerId !== event.pointerId) return
         drag.current = null
         setPanning(false)
+        panEndedHere.current = active.moved
+      }}
+      // Selection rides on click rather than pointerup: pointer capture retargets pointer
+      // events at this element, but click still reports the node actually under the cursor.
+      onClick={(event) => {
+        if (panEndedHere.current) {
+          panEndedHere.current = false
+          return
+        }
+        const node = (event.target as Element).closest('g.node')
+        onSelect(node === null ? null : nodeIdFromElement(node))
       }}
     >
       <div
