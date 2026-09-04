@@ -4,8 +4,9 @@ A drag-and-drop WYSIWYG editor for [mermaid](https://mermaid.js.org) diagrams. C
 the left, live diagram on the right, tool picker on top. Runs entirely in the browser with no
 backend.
 
-**Status: early.** Milestones 1 and 2 work — a real code editor on the left, live diagram on
-the right. None of the direct-manipulation editing exists yet. See [Roadmap](#roadmap).
+**Status: early.** Milestones 1 to 3 work — a real code editor on the left, a pannable and
+zoomable diagram canvas on the right. None of the direct-manipulation editing exists yet:
+the diagram is still something you read, not something you edit. See [Roadmap](#roadmap).
 
 ## Why this is not a whiteboard
 
@@ -61,8 +62,10 @@ Worth reaching early rather than late.
 - [x] **2. Real code pane.** CodeMirror 6 replaces the textarea: line numbers, mermaid
       syntax highlighting, undo/redo, and a controlled two-way binding so a later milestone
       can rewrite the source from the canvas. No selection wiring yet — that is milestone 4.
-- [ ] **3. Canvas and chrome.** Excalidraw-style floating toolbar islands, dotted grid,
-      pan and zoom.
+- [x] **3. Canvas and chrome.** Dotted grid that pans and scales with the view, drag to pan,
+      cursor-anchored wheel zoom, and a floating toolbar island with zoom, fit, and reset.
+      The island holds only controls that work — a shape/text tool picker would be dead
+      buttons until milestones 5 and 6, so it lands with them.
 - [ ] **4. Selection — the viability gate.** Click a rendered node, resolve it to a range in
       the source, highlight that range in the editor. Mapping the SVG element back to a
       mermaid entity is already confirmed to work; mapping that entity to a *text span* is

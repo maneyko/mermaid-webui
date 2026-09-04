@@ -41,8 +41,9 @@ fail `bun run dev`. Run `bun run typecheck` explicitly.
 ```
 index.html
 src/main.tsx            React root
-src/App.tsx             source state, debounced render, error panel
+src/App.tsx             owns the source string, nothing else
 src/CodePane.tsx        CodeMirror 6 editor, controlled
+src/Canvas.tsx          mermaid render, viewport, toolbar, error panel
 src/mermaidLanguage.ts  syntax highlighting tokenizer
 src/styles.css          all styling
 ```
@@ -113,6 +114,26 @@ target for the Langium migration though, so this may change.
 - Enter inherits the previous line's indentation because a `StreamLanguage` supplies no
   indent rules. Mermaid ignores leading whitespace, so this is cosmetic. If it becomes
   annoying, an `indentService` that outdents `end` and indents after `subgraph` is the fix.
+
+### The canvas viewport
+
+- The viewport is `{x, y, scale}` in `Canvas.tsx`, applied as one CSS transform. Identity is
+  centred, because `.viewport` is a centring grid — which is why Reset needs no measurement.
+- `transform-origin` is the frame centre, so pointer coordinates fed to `zoomAbout` must be
+  relative to the centre, not the top-left. Getting this wrong makes zoom drift.
+- `mermaid.initialize` sets `flowchart: { useMaxWidth: false }` so the SVG carries fixed
+  natural dimensions. With `useMaxWidth` on, mermaid sizes the SVG to its container and
+  fights a viewport doing its own scaling. `fit` reads `svg.width.baseVal.value`, which only
+  means anything because of this.
+- Wheel zoom is a native listener with `{ passive: false }`. React's `onWheel` is passive,
+  so `preventDefault` there is ignored and the page scrolls instead of the diagram zooming.
+- `fit` caps at 100%. Scaling a three-node flowchart up to fill a wide window looks absurd,
+  and "fit" usefully means "make sure I can see all of it".
+- The toolbar stops pointer-down propagation, otherwise every button click also starts a pan.
+- `Canvas.tsx` is around 180 lines and carries two concerns: rendering the diagram and
+  managing the viewport. That is tolerable now. Milestone 4 adds selection to the same file,
+  and that is the point at which pulling the viewport out into `usePanZoom` earns itself.
+  Not before.
 
 ### Rendering
 
