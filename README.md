@@ -4,8 +4,8 @@ A drag-and-drop WYSIWYG editor for [mermaid](https://mermaid.js.org) diagrams. C
 the left, live diagram on the right, tool picker on top. Runs entirely in the browser with no
 backend.
 
-**Status: early.** Milestone 1 works — you can edit mermaid source and watch it render. None
-of the direct-manipulation editing exists yet. See [Roadmap](#roadmap).
+**Status: early.** Milestones 1 and 2 work — a real code editor on the left, live diagram on
+the right. None of the direct-manipulation editing exists yet. See [Roadmap](#roadmap).
 
 ## Why this is not a whiteboard
 
@@ -58,8 +58,9 @@ Worth reaching early rather than late.
 
 - [x] **1. Two-pane live preview.** `<textarea>` plus debounced `mermaid.render`. Invalid
       syntax shows a parse error and keeps the last good diagram on screen.
-- [ ] **2. Real code pane.** Replace the textarea with CodeMirror 6: line numbers, mermaid
-      syntax highlighting, and the selection hooks milestone 4 needs.
+- [x] **2. Real code pane.** CodeMirror 6 replaces the textarea: line numbers, mermaid
+      syntax highlighting, undo/redo, and a controlled two-way binding so a later milestone
+      can rewrite the source from the canvas. No selection wiring yet — that is milestone 4.
 - [ ] **3. Canvas and chrome.** Excalidraw-style floating toolbar islands, dotted grid,
       pan and zoom.
 - [ ] **4. Selection — the viability gate.** Click a rendered node, resolve it to a range in
@@ -106,8 +107,8 @@ on the tool picker.
 
 ## Stack
 
-TypeScript, bun, Vite, React 19, mermaid, and (from milestone 2) CodeMirror 6. Five runtime
-dependencies, no backend, deployable as static files.
+TypeScript, bun, Vite, React 19, mermaid, and CodeMirror 6. No backend, deployable as static
+files.
 
 React owns the shell — panels, toolbar, dialogs. It deliberately does **not** own the canvas:
 mermaid emits its own SVG and that subtree is handed over wholesale, so selection state

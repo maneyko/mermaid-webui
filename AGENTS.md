@@ -40,15 +40,18 @@ fail `bun run dev`. Run `bun run typecheck` explicitly.
 
 ```
 index.html
-src/main.tsx      React root
-src/App.tsx       the entire app right now
-src/styles.css    all styling
+src/main.tsx            React root
+src/App.tsx             source state, debounced render, error panel
+src/CodePane.tsx        CodeMirror 6 editor, controlled
+src/mermaidLanguage.ts  syntax highlighting tokenizer
+src/styles.css          all styling
 ```
 
-Planned split as milestone 4 approaches: a `src/mermaid/` directory for the pure functions
-(source -> entities plus text spans, SVG element -> entity, minimal text rewrites) separate
-from `src/ui/`. The `src/mermaid/` half should be pure and unit-testable with `bun test`,
-because that is where the bugs will live.
+Flat on purpose. Planned split as milestone 4 approaches: a `src/mermaid/` directory for the
+pure functions (source -> entities plus text spans, SVG element -> entity, minimal text
+rewrites) separate from `src/ui/`. That half should be pure and unit-testable with
+`bun test`, because that is where the bugs will live. Do not do the split before there is
+something to put in it.
 
 ## Mermaid facts worth not rediscovering
 
@@ -88,6 +91,28 @@ mermaid-js/mermaid#4401 and is not done.
 Since flowchart is the only type we edit, **there is no official typed AST to build on.** Do
 not reach for `@mermaid-js/parser` expecting flowchart support. Flowchart is the obvious next
 target for the Langium migration though, so this may change.
+
+### CodeMirror
+
+- `src/mermaidLanguage.ts` is a `StreamLanguage` tokenizer and **only** does highlighting. It
+  builds no parse tree and has no source spans, so it is not a stepping stone to milestone 4.
+  Do not grow it into a parser; write the real one separately.
+- `codemirror-lang-mermaid` was evaluated and rejected. It is a real Lezer grammar, which is
+  tempting because a Lezer tree *would* carry the positions milestone 4 needs, but it was
+  last published 2023-09-14 and predates mermaid 11 entirely. A grammar that silently
+  mis-parses current flowchart syntax is worse than no grammar.
+- The CM6 core is installed as four explicit packages rather than the `codemirror`
+  meta-package, so the extension list in `CodePane.tsx` is the complete truth about what is
+  enabled. `basicSetup` would have added a search panel, autocomplete, and lint gutter that
+  do nothing for mermaid.
+- `CodePane` is a controlled component with the usual CodeMirror caveat: the view is created
+  once and the `source` prop is read only for the initial document. The prop-sync effect
+  compares against the current doc and no-ops when they match, so typing does not echo. The
+  external-write path is what milestone 5 will use, and it is currently unexercised because
+  nothing writes to `source` except the editor itself.
+- Enter inherits the previous line's indentation because a `StreamLanguage` supplies no
+  indent rules. Mermaid ignores leading whitespace, so this is cosmetic. If it becomes
+  annoying, an `indentService` that outdents `end` and indents after `subgraph` is the fix.
 
 ### Rendering
 

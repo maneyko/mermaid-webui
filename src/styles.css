@@ -3,6 +3,7 @@
   --panel: #f8f9fa;
   --border: #e4e6ea;
   --text: #1b1b1f;
+  --gutter: #9aa0a6;
   --error-bg: #fdeded;
   --error-fg: #b3261e;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -33,14 +34,36 @@ body {
 }
 
 .code {
-  padding: 16px;
-  border: 0;
   border-right: 1px solid var(--border);
   background: var(--panel);
+  overflow: hidden;
+}
+
+.code .cm-editor {
+  height: 100%;
   font: 13px / 1.6 var(--mono);
   tab-size: 2;
-  resize: none;
+}
+
+.code .cm-editor.cm-focused {
   outline: none;
+}
+
+/* CodeMirror sets its own font stack and line height on the scroller, which overrides the
+   editor font unless inherit is forced here. */
+.code .cm-scroller {
+  font-family: inherit;
+  line-height: inherit;
+}
+
+.code .cm-content {
+  padding: 12px 0;
+}
+
+.code .cm-gutters {
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--gutter);
 }
 
 .canvas {

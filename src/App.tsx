@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
+import CodePane from './CodePane'
 
 mermaid.initialize({ startOnLoad: false, suppressErrorRendering: true })
 
@@ -42,12 +43,7 @@ export default function App() {
 
   return (
     <main className="app">
-      <textarea
-        className="code"
-        value={source}
-        onChange={(event) => setSource(event.target.value)}
-        spellCheck={false}
-      />
+      <CodePane source={source} onChange={setSource} />
       <section className="canvas">
         <div className="diagram" ref={canvas} />
         {error !== null && <pre className="error">{error}</pre>}
