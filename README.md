@@ -4,9 +4,10 @@ A drag-and-drop WYSIWYG editor for [mermaid](https://mermaid.js.org) diagrams. C
 the left, live diagram on the right, tool picker on top. Runs entirely in the browser with no
 backend.
 
-**Status: the hard part works.** Click a node in the diagram and the editor selects the text
-that declared it — the code-to-canvas correlation that the whole project depends on is real
-and passing tests. What is still missing is writing edits back the other way. See
+**Status: it edits.** Click a node and the editor selects the text that declared it;
+double-click a node to rename it and the source is rewritten with the smallest possible edit.
+Both directions of the correlation the whole project depends on are real and covered by
+tests. What is missing is dragging — changing a diagram's *structure* from the canvas. See
 [Roadmap](#roadmap).
 
 ## Why this is not a whiteboard
@@ -72,8 +73,10 @@ Worth reaching early rather than late.
       editor selects the text that declared it. Mermaid's flowchart parser keeps no source
       positions, so `src/correlate.ts` recovers the spans by scanning the source directly.
       It is a scanner, not a parser: it locates node declarations and nothing else.
-- [ ] **5. First mutation.** Rename a node label on the canvas and write a minimal edit back
-      to the source, preserving all surrounding syntax.
+- [x] **5. First mutation.** Double-click a node to rename it in place. The edit replaces
+      only the label's own span, so the rest of the line comes back byte-identical, and a
+      label containing brackets or quotes is quoted and escaped so it round-trips exactly.
+      Enter commits, Escape cancels.
 - [ ] **6. Drag as a structural edit.** Reorder siblings, reparent into a subgraph,
       reconnect an edge.
 

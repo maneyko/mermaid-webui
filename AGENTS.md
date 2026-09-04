@@ -46,13 +46,15 @@ src/CodePane.tsx        CodeMirror 6 editor, controlled
 src/Canvas.tsx          mermaid render, viewport, selection, toolbar, error panel
 src/correlate.ts        source -> node spans, and rendered SVG id -> node id
 src/correlate.test.ts   bun test
+src/edit.ts             minimal rewrites back into the source
+src/edit.test.ts        bun test
 src/mermaidLanguage.ts  syntax highlighting tokenizer
 src/styles.css          all styling
 ```
 
-Flat on purpose. `correlate.ts` is the pure half and the only part with tests, which is
-deliberate: it is where the bugs will live. Keep new pure logic there or beside it, and keep
-it free of DOM and React so it stays testable with `bun test`.
+Flat on purpose. `correlate.ts` (read) and `edit.ts` (write) are the pure half and the only
+parts with tests, which is deliberate: it is where the bugs will live. Keep new pure logic
+there, free of DOM and React, so it stays testable with `bun test`.
 
 `Canvas.tsx` is around 240 lines and now carries three concerns: rendering, the viewport, and
 selection. This is the point where pulling the viewport out into a `usePanZoom` hook stops
@@ -175,6 +177,36 @@ Re-rendering replaces the whole SVG, so the selection class is reapplied after e
 Spans are offsets into a specific version of the text, so `App` clears the selection whenever
 the source changes. Any future feature that edits text while keeping a selection has to
 recompute the spans, not carry them across.
+
+### Renaming
+
+- **Double-click hit-tests coordinates, not `event.target`.** `dblclick` retargets to the
+  common ancestor of its two clicks, which for a mermaid node is the canvas itself, so the
+  handler uses `document.elementFromPoint` instead.
+- **The reveal effect must not focus the editor.** It used to, which stole focus from the
+  freshly mounted rename overlay and blurred it out of existence on the same tick. This is
+  why `drawSelection()` is in the extension list: it renders the selection while the editor
+  is unfocused, so the highlight survives without grabbing focus.
+- **Enter and Escape both blur**, so committing has exactly one path in `onBlur`. Escape sets
+  a ref first that the blur handler consumes. Commit-on-blur means incidental focus loss
+  commits the edit, which is the same behaviour as Excalidraw and is intended.
+
+### Editing the source
+
+`edit.ts` holds every write path. The rule for all of them: replace the smallest span that
+expresses the change, so every byte outside it comes back identical.
+
+- **Labels are quoted when they have to be, and only then.** A label containing
+  `" [ ] { } ( ) | < >`, or with leading or trailing spaces, or empty, is wrapped in double
+  quotes with any `"` escaped as `#quot;`. `quoteLabel` and `unquoteLabel` are inverses and
+  there is a round-trip test over the awkward cases; keep it that way.
+- **We must be able to re-read what we write.** This bit us once: `A["Buy [things"]` is
+  valid mermaid and we emit it, but the scanner counted the unbalanced `[` and never closed
+  the shape, so the node degraded to a bare id and a *second* rename appended a second shape
+  instead of replacing the label. `skipShape` now skips quoted strings. Any new emitter needs
+  the same check — write a value, read it back, write again.
+- **Renaming a bare node gives it a shape** (`B` becomes `B[Label]`) at the declaration only,
+  leaving every other mention of the id alone.
 
 ### Rendering
 

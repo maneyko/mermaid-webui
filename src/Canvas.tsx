@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import { nodeIdFromElement } from './correlate'
+import { labelOf } from './edit'
 
 // useMaxWidth would make mermaid size the SVG to its container, which fights a viewport that
 // does its own scaling. Fixed natural dimensions leave zoom entirely to our transform.
@@ -18,6 +19,9 @@ const BUTTON_ZOOM_STEP = 1.2
 const WHEEL_ZOOM_DIVISOR = 700
 const GRID_SPACING = 20
 const FIT_PADDING = 48
+// Matches mermaid's default node label size, so the overlay sits at the size of the text
+// it replaces.
+const LABEL_FONT_SIZE = 16
 
 interface Viewport {
   x: number
@@ -57,13 +61,26 @@ function zoomAbout(view: Viewport, pointerX: number, pointerY: number, factor: n
 // Below this many pixels of pointer travel, a drag counts as a click rather than a pan.
 const CLICK_SLOP = 4
 
+interface Editing {
+  nodeId: string
+  value: string
+  original: string
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
 interface CanvasProps {
   source: string
   selected: string | null
   onSelect: (nodeId: string | null) => void
+  onRename: (nodeId: string, label: string) => void
 }
 
-export default function Canvas({ source, selected, onSelect }: CanvasProps) {
+export default function Canvas({ source, selected, onSelect, onRename }: CanvasProps) {
+  const [editing, setEditing] = useState<Editing | null>(null)
+  const abandoned = useRef(false)
   const [view, setView] = useState<Viewport>(CENTERED)
   const [panning, setPanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -206,6 +223,30 @@ export default function Canvas({ source, selected, onSelect }: CanvasProps) {
         const node = (event.target as Element).closest('g.node')
         onSelect(node === null ? null : nodeIdFromElement(node))
       }}
+      // dblclick retargets to the common ancestor of the two clicks, which for a mermaid node
+      // is the canvas itself. Hit-testing the coordinates instead gives the real node.
+      onDoubleClick={(event) => {
+        const node = document.elementFromPoint(event.clientX, event.clientY)?.closest('g.node')
+        if (node == null || frame.current === null) return
+        const nodeId = nodeIdFromElement(node)
+        if (nodeId === null) return
+
+        // getBoundingClientRect already accounts for the viewport transform, so the overlay
+        // lands on the node at any pan or zoom.
+        const nodeBounds = node.getBoundingClientRect()
+        const frameBounds = frame.current.getBoundingClientRect()
+        const label = labelOf(source, nodeId)
+
+        setEditing({
+          nodeId,
+          value: label,
+          original: label,
+          left: nodeBounds.left - frameBounds.left,
+          top: nodeBounds.top - frameBounds.top,
+          width: nodeBounds.width,
+          height: nodeBounds.height,
+        })
+      }}
     >
       <div
         className="viewport"
@@ -230,6 +271,39 @@ export default function Canvas({ source, selected, onSelect }: CanvasProps) {
           Reset
         </button>
       </div>
+
+      {editing !== null && (
+        <input
+          className="rename"
+          autoFocus
+          value={editing.value}
+          style={{
+            left: editing.left,
+            top: editing.top,
+            width: editing.width,
+            height: editing.height,
+            fontSize: `${LABEL_FONT_SIZE * view.scale}px`,
+          }}
+          onChange={(event) => setEditing({ ...editing, value: event.target.value })}
+          onPointerDown={(event) => event.stopPropagation()}
+          // Enter and Escape both blur, so committing has exactly one path.
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur()
+            if (event.key === 'Escape') {
+              abandoned.current = true
+              event.currentTarget.blur()
+            }
+          }}
+          onBlur={() => {
+            const cancelled = abandoned.current
+            abandoned.current = false
+            setEditing(null)
+            if (!cancelled && editing.value !== editing.original) {
+              onRename(editing.nodeId, editing.value)
+            }
+          }}
+        />
+      )}
 
       {error !== null && <pre className="error">{error}</pre>}
     </section>

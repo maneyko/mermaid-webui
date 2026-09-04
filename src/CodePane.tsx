@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { EditorState } from '@codemirror/state'
-import { EditorView, keymap, lineNumbers } from '@codemirror/view'
+import { EditorView, drawSelection, keymap, lineNumbers } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { mermaidLanguage } from './mermaidLanguage'
@@ -33,6 +33,9 @@ export default function CodePane({ source, onChange, reveal }: CodePaneProps) {
         doc: source,
         extensions: [
           lineNumbers(),
+          // Without this the selection is the native one, which is invisible unless the
+          // editor holds focus -- and the canvas is where the user is working.
+          drawSelection(),
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           syntaxHighlighting(defaultHighlightStyle),
@@ -64,8 +67,9 @@ export default function CodePane({ source, onChange, reveal }: CodePaneProps) {
     editor.dispatch({ changes: { from: 0, to: current.length, insert: source } })
   }, [source])
 
-  // Selecting the range is the highlight: it uses CodeMirror's own selection rendering
-  // rather than a decoration layer, and leaves the cursor somewhere useful for editing.
+  // Selecting the range is the highlight: it uses CodeMirror's own selection rendering rather
+  // than a decoration layer. Deliberately does not focus the editor -- the selection comes
+  // from clicking the canvas, and stealing focus there kills the rename overlay.
   useEffect(() => {
     const editor = view.current
     if (editor === null || reveal === null) return
@@ -74,7 +78,6 @@ export default function CodePane({ source, onChange, reveal }: CodePaneProps) {
     if (reveal.from > end || reveal.to > end) return
 
     editor.dispatch({ selection: { anchor: reveal.from, head: reveal.to }, scrollIntoView: true })
-    editor.focus()
   }, [reveal])
 
   return <div className="code" ref={host} />

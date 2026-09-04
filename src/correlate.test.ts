@@ -77,6 +77,12 @@ test('spans point at the right offsets in the original text', () => {
   expect(node?.to).toBe(source.indexOf('A[Christmas]') + 'A[Christmas]'.length)
 })
 
+test('delimiters inside a quoted label do not affect nesting', () => {
+  const source = 'flowchart TD\n  A["Buy [things"] --> B\n'
+  expect(spanOf(source, 'A')).toBe('A["Buy [things"]')
+  expect(labelOf(source, 'A')).toBe('"Buy [things"')
+})
+
 test('an unterminated shape does not swallow the rest of the file', () => {
   const source = 'flowchart TD\n  A[Unclosed\n  B --> C\n'
   expect(spanOf(source, 'A')).toBe('A')

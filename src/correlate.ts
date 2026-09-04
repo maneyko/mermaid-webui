@@ -47,13 +47,17 @@ function skipDelimited(source: string, index: number, delimiter: string): number
   return closing === -1 ? source.length : closing + 1
 }
 
-// Node labels nest (`[[Subroutine]]`, `((Circle))`), so match by depth. Returns the index
-// just past the closing delimiter, or null if it never closes.
+// Node labels nest (`[[Subroutine]]`, `((Circle))`), so match by depth. Delimiters inside a
+// quoted label are text and must not count, or `A["Buy [things"]` -- which mermaid accepts
+// and which we ourselves emit for a label containing a bracket -- never closes. Returns the
+// index just past the closing delimiter, or null if it never closes.
 function skipShape(source: string, index: number, open: string, close: string): number | null {
   let depth = 0
   for (let cursor = index; cursor < source.length; cursor += 1) {
     const character = source[cursor]
-    if (character === open) {
+    if (character === '"') {
+      cursor = skipDelimited(source, cursor, '"') - 1
+    } else if (character === open) {
       depth += 1
     } else if (character === close) {
       depth -= 1
