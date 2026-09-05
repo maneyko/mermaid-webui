@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from 'react'
 
-export interface Viewport {
+interface Viewport {
   x: number
   y: number
   scale: number

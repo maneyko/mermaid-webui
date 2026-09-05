@@ -244,6 +244,14 @@ function removalSpan(source: string, statement: Statement): Span {
   return { from: start, to: to === source.length ? to : to + 1 }
 }
 
+// What a statement becomes: the lines standing in its place, or nothing, in which case the
+// statement's line goes too. Continuation lines take the statement's own indentation, which
+// is what keeps a rescued node inside its subgraph.
+function restatement(source: string, statement: Statement, lines: string[]) {
+  const span = lines.length === 0 ? removalSpan(source, statement) : statement
+  return { from: span.from, to: span.to, text: lines.join(`\n${indentOf(source, statement.from)}`) }
+}
+
 // Deleting a node deletes its edges and nothing else. Because mermaid declares most nodes
 // inside an edge statement, removing those statements would take the neighbours' labels with
 // them, so any node left without a declaration is re-emitted where its statement stood --
@@ -293,11 +301,8 @@ export function deleteNode(source: string, nodeId: string): string {
 
   let result = source
   for (const { statement, lost } of edits.reverse()) {
-    const span = lost.length === 0 ? removalSpan(source, statement) : statement
-    result =
-      result.slice(0, span.from) +
-      lost.join(`\n${indentOf(source, statement.from)}`) +
-      result.slice(span.to)
+    const { from, to, text } = restatement(source, statement, lost)
+    result = result.slice(0, from) + text + result.slice(to)
   }
 
   return result
@@ -348,12 +353,8 @@ export function deleteEdge(source: string, index: number): string {
     for (const node of half) elsewhere.add(node.id)
   }
 
-  const span = parts.length === 0 ? removalSpan(source, statement) : statement
-  return (
-    source.slice(0, span.from) +
-    parts.join(`\n${indentOf(source, statement.from)}`) +
-    source.slice(span.to)
-  )
+  const { from, to, text } = restatement(source, statement, parts)
+  return source.slice(0, from) + text + source.slice(to)
 }
 
 export function renameLabel(source: string, nodeId: string, label: string): string {

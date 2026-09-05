@@ -114,17 +114,20 @@ export default function App() {
     setReveal(target === null ? null : spanOf(target, source))
   }
 
+  // Every rewrite moves the spans after it, so the selection goes with the text it pointed
+  // at. Colour is the one exception, and says so where it breaks the rule.
+  const rewrite = (next: string) => {
+    setSource(next)
+    setSelected(null)
+    setReveal(null)
+  }
+
   return (
     <main className="app">
       <CodePane
         source={source}
         reveal={reveal}
-        onChange={(next) => {
-          setSource(next)
-          // Spans are offsets into the old text, so editing invalidates the selection.
-          setSelected(null)
-          setReveal(null)
-        }}
+        onChange={rewrite}
       />
       <Canvas
         source={source}
@@ -139,27 +142,10 @@ export default function App() {
           onSave: () => void saveFile(),
         }}
         onSelect={select}
-        onRename={(nodeId, label) => {
-          // The rewritten text moves every span after the edit, so the old ones are dead.
-          setSource(renameLabel(source, nodeId, label))
-          setSelected(null)
-          setReveal(null)
-        }}
-        onRenameEdge={(index, label) => {
-          setSource(renameEdgeLabel(source, index, label))
-          setSelected(null)
-          setReveal(null)
-        }}
-        onConnect={(fromId, toId) => {
-          setSource(connectNodes(source, fromId, toId))
-          setSelected(null)
-          setReveal(null)
-        }}
-        onSetShape={(nodeId, shape) => {
-          setSource(setNodeShape(source, nodeId, shape))
-          setSelected(null)
-          setReveal(null)
-        }}
+        onRename={(nodeId, label) => rewrite(renameLabel(source, nodeId, label))}
+        onRenameEdge={(index, label) => rewrite(renameEdgeLabel(source, index, label))}
+        onConnect={(fromId, toId) => rewrite(connectNodes(source, fromId, toId))}
+        onSetShape={(nodeId, shape) => rewrite(setNodeShape(source, nodeId, shape))}
         // The one edit that keeps its selection: trying a colour and then another is the
         // whole gesture, so the span is recomputed against the new text instead of dropped.
         onSetColor={(nodeId, color) => {
@@ -169,28 +155,18 @@ export default function App() {
         }}
         onAddNode={(fromId, shape) => {
           const added = addConnectedNode(source, fromId, shape)
-          setSource(added.source)
-          setSelected(null)
-          setReveal(null)
+          rewrite(added.source)
           return added.nodeId
         }}
         onAddStandalone={(shape) => {
           const added = addStandaloneNode(source, shape)
-          setSource(added.source)
-          setSelected(null)
-          setReveal(null)
+          rewrite(added.source)
           return added.nodeId
         }}
         onDelete={(target) => {
-          setSource(
-            target.kind === 'node'
-              ? deleteNode(source, target.nodeId)
-              : target.kind === 'edge'
-                ? deleteEdge(source, target.index)
-                : deleteEdgeLabel(source, target.index),
-          )
-          setSelected(null)
-          setReveal(null)
+          if (target.kind === 'node') rewrite(deleteNode(source, target.nodeId))
+          else if (target.kind === 'edge') rewrite(deleteEdge(source, target.index))
+          else rewrite(deleteEdgeLabel(source, target.index))
         }}
       />
     </main>
