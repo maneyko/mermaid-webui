@@ -6,11 +6,11 @@ backend.
 
 **Status: it edits, and it saves.** Click a node, an edge or an edge label to select it,
 double-click to rename it in place, Delete to remove it; drag between nodes to connect them;
-drag out from one to add a new node; pick any of mermaid's 53 shapes to restyle what is
-selected; undo from anywhere with cmd+Z. Every change rewrites the source with the smallest
-possible edit. Your
-work survives a refresh, and cmd+S writes it back to a real `.mmd` file — that last part
-needs Chrome or Edge. See [Work items](#work-items).
+arm one of mermaid's 53 shapes and click a node to hang a new one off it, or blank canvas for a
+node of its own; with something selected the same buttons restyle it; undo from anywhere with
+cmd+Z. Every change rewrites the source with the smallest possible edit. Your work survives a
+refresh, and cmd+S writes it back to a real `.mmd` file — that last part needs Chrome or Edge.
+See [Work items](#work-items).
 
 ## Why this is not a whiteboard
 
@@ -158,12 +158,13 @@ viable at all; everything before it was chrome.
 
 - [x] **17. Say what a click will add, not where.** With a shape armed, a dashed ghost of it
       follows the cursor; pass over a node and the ghost snaps below it with the rubber band
-      joining the two, so you can see it would be a child of that node before committing to the
-      drag. Over empty canvas there is no band, which is what standalone looks like. The
-      position is never previewed, because the release point contributes nothing to it — the
-      same three words of source are written wherever you let go. The new node pulses once it
-      arrives, which is the only honest half of that: it reports where dagre put it instead of
-      guessing beforehand.
+      joining the two, so you can see it would be a child of that node before you commit. Over
+      empty canvas there is no band, which is what standalone looks like. Clicking is all it
+      takes — dragging out from the node still works and does the same thing, because it *is*
+      the same gesture: the release point contributes nothing, so a press and release with no
+      travel is just the short version of it. The position is never previewed. The new node
+      pulses once it arrives, which is the honest half of that: it reports where dagre put it
+      rather than guessing beforehand.
 
 Not done yet, roughly in the order I would take them:
 

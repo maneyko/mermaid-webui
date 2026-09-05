@@ -431,9 +431,17 @@ export default function Canvas({
         if (connecting !== null) {
           const to = toFrame(event.clientX, event.clientY)
           setConnecting({ ...connecting, to })
+
+          // The new node hangs off where the drag started whatever is under the cursor, so the
+          // ring stays on the source rather than following onto nodes with no part in it.
+          if (tool === 'shape') {
+            setGhost({ at: to, from: connecting.from })
+            hover({ kind: 'node', nodeId: connecting.fromId })
+            return
+          }
+
           const hit = nodeAt(event.clientX, event.clientY)
           hover(hit === null || hit.id === connecting.fromId ? null : nodeTarget(hit))
-          if (tool === 'shape') setGhost({ at: to, from: connecting.from })
           return
         }
 
@@ -460,7 +468,6 @@ export default function Canvas({
       onPointerLeave={() => setGhost(null)}
       onPointerUp={(event) => {
         if (connecting !== null) {
-          const hit = nodeAt(event.clientX, event.clientY)
           setConnecting(null)
           setHovered(null)
           // A cancelled drag would otherwise leave the band hanging off its source node until
@@ -468,18 +475,18 @@ export default function Canvas({
           setGhost(null)
           panEndedHere.current = true
 
+          // Where the release lands says nothing -- it never reaches the source -- so the whole
+          // gesture is "which node does this hang off", and it can end anywhere, including on
+          // the node it began on. That last case is a plain click, with no travel at all.
           if (tool === 'shape') {
-            // Empty space is where a new node goes; releasing on a node is the arrow tool's
-            // gesture, not this one.
-            if (hit === null) {
-              landed.current = onAddNode(connecting.fromId, shape)
-              setTool('select')
-            }
+            landed.current = onAddNode(connecting.fromId, shape)
+            setTool('select')
             return
           }
 
           // Dropping on empty space, or back on the start, cancels. Requiring two different
           // nodes means a stray click cannot silently add a self-loop.
+          const hit = nodeAt(event.clientX, event.clientY)
           if (hit !== null && hit.id !== connecting.fromId) {
             onConnect(connecting.fromId, hit.id)
             setTool('select')

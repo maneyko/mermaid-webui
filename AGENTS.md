@@ -274,7 +274,12 @@ recompute the spans, not carry them across.
   That also lists the aliases, which are deliberately not carried here -- see the README's
   known issues. Every one of the 53 was then rendered in the browser to check mermaid accepts
   it and to draw the icon from what it actually looks like. Re-do both if mermaid is upgraded.
-- **Dragging out creates a connected node; clicking blank canvas creates a standalone one.**
+- **Clicking a node creates a connected node; clicking blank canvas creates a standalone one.**
+- **There is no separate drag gesture, only the same one with travel.** A press on a node
+  starts a connect drag whichever of the two tools is armed, so a press and release on the node
+  itself already arrives at the shape tool's `pointerup` branch with zero travel -- which is
+  what a click is. All that branch does is refuse to care where the release landed. Do not add
+  a click handler beside it; the second path would be the bug.
 - **The release point contributes nothing to where the node lands.** Releasing bottom-left of
   `C` and releasing top-right of it produce the same three words of source, so dagre returns
   the same layout. Measured on a six-node chart: a new child of `C` lands past its last
@@ -292,6 +297,10 @@ recompute the spans, not carry them across.
   is the message: no band means standalone. Below rather than beside is the one approximation
   in it, and it is only wrong-looking in an `LR` chart; reading the direction out of the source
   would fix it if that ever grates.
+- **During a shape drag the ring stays on the node the drag started from**, not on whatever the
+  cursor passes over. The arrow tool rings what it would connect *to*; the shape tool has no
+  such thing, and ringing a node with no part in the edit is the kind of small lie that teaches
+  someone the wrong model.
 - **The pulse is the other half.** A node created by either gesture gets a `landed` class in
   the same place the rename box is opened, and glows twice. It reports rather than predicts,
   which is the only kind of feedback available here. It has to be a glow and not a ring: the
