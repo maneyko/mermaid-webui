@@ -92,14 +92,25 @@ export function nextNodeId(source: string): string {
   }
 }
 
-export function addConnectedNode(source: string, fromId: string, shape: Shape) {
+function appendNode(source: string, prefix: string, shape: Shape) {
   const nodeId = nextNodeId(source)
   const body = source.endsWith('\n') || source === '' ? source : `${source}\n`
-  const empty = quoteLabel('')
+  const blank = quoteLabel('')
   return {
-    source: `${body}${trailingIndent(source)}${fromId} --> ${nodeId}${shape.open}${empty}${shape.close}\n`,
+    source: `${body}${trailingIndent(source)}${prefix}${nodeId}${shape.open}${blank}${shape.close}\n`,
     nodeId,
   }
+}
+
+export function addConnectedNode(source: string, fromId: string, shape: Shape) {
+  return appendNode(source, `${fromId} --> `, shape)
+}
+
+// Standalone nodes are their own dagre component, so this one will not render where the user
+// clicked. That is understood and asked for: sometimes you want a node before you know what
+// it connects to.
+export function addStandaloneNode(source: string, shape: Shape) {
+  return appendNode(source, '', shape)
 }
 
 // The label is carried across verbatim rather than re-quoted, so an already-quoted one such as

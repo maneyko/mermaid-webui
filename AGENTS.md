@@ -71,7 +71,7 @@ internals are not a public API.
 
 ### Correlating rendered SVG back to source
 
-This is milestone 4's foundation. Half of it is solved:
+This is what selection is built on. Half of it is solved:
 
 - **Nodes** are `g.node` elements with
   `id="<renderId>-flowchart-<nodeId>-<n>"`, e.g. `mermaid-2-flowchart-A-0`.
@@ -119,10 +119,10 @@ target for the Langium migration though, so this may change.
 ### CodeMirror
 
 - `src/mermaidLanguage.ts` is a `StreamLanguage` tokenizer and **only** does highlighting. It
-  builds no parse tree and has no source spans, so it is not a stepping stone to milestone 4.
+  builds no parse tree and has no source spans, so it is not a stepping stone to a real parser.
   Do not grow it into a parser; write the real one separately.
 - `codemirror-lang-mermaid` was evaluated and rejected. It is a real Lezer grammar, which is
-  tempting because a Lezer tree *would* carry the positions milestone 4 needs, but it was
+  tempting because a Lezer tree *would* carry the source positions we need, but it was
   last published 2023-09-14 and predates mermaid 11 entirely. A grammar that silently
   mis-parses current flowchart syntax is worse than no grammar.
 - The CM6 core is installed as four explicit packages rather than the `codemirror`
@@ -132,7 +132,7 @@ target for the Langium migration though, so this may change.
 - `CodePane` is a controlled component with the usual CodeMirror caveat: the view is created
   once and the `source` prop is read only for the initial document. The prop-sync effect
   compares against the current doc and no-ops when they match, so typing does not echo. The
-  external-write path is what milestone 5 will use, and it is currently unexercised because
+  external-write path is what canvas edits use, and it was unexercised at first because
   nothing writes to `source` except the editor itself.
 - Enter inherits the previous line's indentation because a `StreamLanguage` supplies no
   indent rules. Mermaid ignores leading whitespace, so this is cosmetic. If it becomes
@@ -201,9 +201,11 @@ recompute the spans, not carry them across.
   label verbatim (an already-quoted `"a|b"` is carried across, not re-quoted). With nothing
   selected they arm the shape tool, and dragging out from a node to empty canvas creates a
   new connected node.
-- **New nodes are created connected, never free-standing.** A disconnected node is its own
-  dagre component and gets parked away from wherever the user gestured, which reads as a bug.
-  Connected, it lands near the release point because its parent anchors it.
+- **Dragging out creates a connected node; clicking blank canvas creates a standalone one.**
+  Connected nodes land near the release point because their parent anchors them. A standalone
+  node is its own dagre component and will render wherever the layout puts it, which is
+  usually nowhere near the click. That is a known and accepted cost of asking for a node
+  before you know what it attaches to, not something to try to fix with positioning.
 - A doubled delimiter is one shape, not nesting -- see the label rules above. This matters
   most for circles: get it wrong and renaming `A((x))` silently emits `A(x)`.
 
@@ -225,6 +227,13 @@ recompute the spans, not carry them across.
   `connectNodes` otherwise does not require.
 
 ### Renaming
+
+- **A single click opens the rename box**; there is no double-click path any more. Dragging
+  is the only other thing a click on a node could mean, so making renaming wait for a second
+  click bought nothing. Clicking a node also selects it, because the shape buttons restyle
+  the selection and would otherwise have nothing to act on.
+- The overlay stops `click` as well as `pointerdown`. Without that, clicking inside the box
+  reaches the canvas as a click on whatever sits behind it and reopens the editor.
 
 - **Double-click hit-tests coordinates, not `event.target`.** `dblclick` retargets to the
   common ancestor of its two clicks, which for a mermaid node is the canvas itself, so the

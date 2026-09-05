@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import {
   addConnectedNode,
+  addStandaloneNode,
   connectNodes,
   nextNodeId,
   setNodeShape,
@@ -117,6 +118,18 @@ test('adding a connected node appends one line and reports the new id', () => {
   const added = addConnectedNode(SOURCE, 'C', shape('Diamond'))
   expect(added.nodeId).toBe('D')
   expect(added.source).toBe(`${SOURCE}  C --> D{" "}\n`)
+})
+
+test('a standalone node is appended with no edge', () => {
+  const added = addStandaloneNode(SOURCE, shape('Rectangle'))
+  expect(added.nodeId).toBe('D')
+  expect(added.source).toBe(`${SOURCE}  D[" "]\n`)
+})
+
+test('a standalone node is readable back and nameable', () => {
+  const added = addStandaloneNode(SOURCE, shape('Diamond'))
+  expect(labelOf(added.source, 'D')).toBe(' ')
+  expect(renameLabel(added.source, 'D', 'Alone')).toContain('D{Alone}')
 })
 
 test('a newly added node is readable back by the scanner', () => {

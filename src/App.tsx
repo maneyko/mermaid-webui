@@ -2,7 +2,14 @@ import { useState } from 'react'
 import CodePane, { type Range } from './CodePane'
 import Canvas from './Canvas'
 import { findNodes } from './correlate'
-import { addConnectedNode, connectNodes, renameEdgeLabel, renameLabel, setNodeShape } from './edit'
+import {
+  addConnectedNode,
+  addStandaloneNode,
+  connectNodes,
+  renameEdgeLabel,
+  renameLabel,
+  setNodeShape,
+} from './edit'
 
 const INITIAL_SOURCE = `flowchart TD
   A[Christmas] -->|Get money| B(Go shopping)
@@ -67,6 +74,13 @@ export default function App() {
         }}
         onAddNode={(fromId, shape) => {
           const added = addConnectedNode(source, fromId, shape)
+          setSource(added.source)
+          setSelected(null)
+          setReveal(null)
+          return added.nodeId
+        }}
+        onAddStandalone={(shape) => {
+          const added = addStandaloneNode(source, shape)
           setSource(added.source)
           setSelected(null)
           setReveal(null)

@@ -111,6 +111,7 @@ interface CanvasProps {
   onConnect: (fromId: string, toId: string) => void
   onSetShape: (nodeId: string, shape: Shape) => void
   onAddNode: (fromId: string, shape: Shape) => string
+  onAddStandalone: (shape: Shape) => string
 }
 
 export default function Canvas({
@@ -122,6 +123,7 @@ export default function Canvas({
   onConnect,
   onSetShape,
   onAddNode,
+  onAddStandalone,
 }: CanvasProps) {
   const [tool, setTool] = useState<Tool>('select')
   const [shape, setShape] = useState<Shape>(SHAPES[0] as Shape)
@@ -332,40 +334,38 @@ export default function Canvas({
         panEndedHere.current = panZoom.end(event)
       }}
       // Selection rides on click rather than pointerup: pointer capture retargets pointer
-      // events at this element, but click still reports the node actually under the cursor.
+      // events at this element, but click still reports what is actually under the cursor.
       onClick={(event) => {
         if (panEndedHere.current) {
           panEndedHere.current = false
           return
         }
+
+        if (tool === 'shape') {
+          // Blank canvas is the only place a standalone node can be asked for; a click on a
+          // node belongs to the drag-out gesture, which pointerup already handled.
+          const onNode = (event.target as Element).closest('g.node')
+          if (onNode === null) {
+            pendingRename.current = onAddStandalone(shape)
+            setTool('select')
+          }
+          return
+        }
+
         if (tool !== 'select') return
-        const node = (event.target as Element).closest('g.node')
-        onSelect(node === null ? null : nodeIdFromElement(node))
-      }}
-      // dblclick retargets to the common ancestor of the two clicks, which for a mermaid node
-      // is the canvas itself. Hit-testing the coordinates instead gives the real node.
-      onDoubleClick={(event) => {
-        if (tool !== 'select' || frame.current === null) return
-        const hit = document.elementFromPoint(event.clientX, event.clientY)
-        if (hit == null) return
 
-        const found = editTargetFor(hit, source, diagram.current)
-        if (found === null) return
+        // Dragging is the only other thing a click could have meant, so there is no reason to
+        // make renaming wait for a second one.
+        const found = editTargetFor(event.target as Element, source, diagram.current)
+        if (found === null) {
+          onSelect(null)
+          return
+        }
 
-        // getBoundingClientRect already accounts for the viewport transform, so the overlay
-        // lands on what it replaces at any pan or zoom.
-        const bounds = found.element.getBoundingClientRect()
-        const frameBounds = frame.current.getBoundingClientRect()
-
-        setEditing({
-          target: found.target,
-          value: found.label,
-          original: found.label,
-          left: bounds.left - frameBounds.left,
-          top: bounds.top - frameBounds.top,
-          width: bounds.width,
-          height: bounds.height,
-        })
+        // Clicking an edge label is still a move away from whatever node was selected, so the
+        // selection has to follow the click rather than linger on the previous node.
+        onSelect(found.target.kind === 'node' ? found.target.nodeId : null)
+        openEditorOn(found.element, found.target, found.label)
       }}
     >
       <div
@@ -417,7 +417,10 @@ export default function Canvas({
             }
           })()}
           onChange={(event) => setEditing({ ...editing, value: event.target.value })}
+          // Clicking inside the box must not reach the canvas, which would read it as a click
+          // on whatever sits behind and immediately reopen the editor.
           onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
           // Enter and Escape both blur, so committing has exactly one path.
           onKeyDown={(event) => {
             if (event.key === 'Enter') event.currentTarget.blur()
