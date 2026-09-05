@@ -5,13 +5,14 @@ the left, live diagram on the right, tool picker on top. Runs entirely in the br
 backend.
 
 **Status: it edits, and it saves.** Click a node, an edge or an edge label to select it,
-double-click or press Enter to rename it in place, Delete to remove it; drag between nodes to
-connect them;
-arm one of mermaid's 53 shapes and click a node to hang a new one off it, or blank canvas for a
-node of its own; with something selected the same buttons restyle it; undo from anywhere with
-cmd+Z. Every change rewrites the source with the smallest possible edit. Your work survives a
-refresh, and cmd+S writes it back to a real `.mmd` file — that last part needs Chrome or Edge.
-See [Work items](#work-items).
+double-click or press Enter to rename it in place — including labelling an edge that has
+none — and Delete to remove it. Drag between nodes to connect them. Arm one of mermaid's 53
+shapes and click a node to hang a new one off it, or blank canvas for a node of its own; with
+something selected those same buttons restyle it, and a row of swatches recolours it. Undo
+from anywhere with cmd+Z. Every change rewrites the source with the smallest possible edit,
+so the `.mmd` stays yours: hand-edited formatting, comments and all come back untouched. Your
+work survives a refresh, and cmd+S writes it back to a real file — that last part needs Chrome
+or Edge. See [Work items](#work-items).
 
 ## Why this is not a whiteboard
 
@@ -196,6 +197,17 @@ Not done yet, roughly in the order I would take them:
       reparent a node by dragging it into a subgraph. Reparenting needs subgraph hit-testing,
       since subgraphs render as `g.cluster` and nothing selects those. The statement spans
       both wanted now exist, from item 9.
+
+- [ ] **A truthful preview of where the layout will land, if it is ever worth the machinery.**
+      Item 17 deliberately previews *attachment* rather than position, because the position
+      cannot be known without running dagre and because adding a node reflows everything
+      already on screen. The honest version is therefore not a ghost under the cursor but a
+      ghost of the *whole next layout*: render the prospective source into a hidden container,
+      diff it against what is showing, and draw that. It is buildable — a second render
+      pipeline, one speculative render per hover target, debounced the way the real one is —
+      but it is a lot of apparatus for a hint, and it should not be started without deciding
+      that the hint is worth it. Written down here so the option is not rediscovered from
+      scratch, not because it is queued.
 
 ## Scope
 

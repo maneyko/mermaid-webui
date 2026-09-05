@@ -234,6 +234,11 @@ recompute the spans, not carry them across.
   the rename overlay. `isTyping` checks for an enclosing `input`, `textarea` or
   `contenteditable` -- CodeMirror's editable surface is the last of those. That guard is
   correct and is also why the Delete shortcut needs a button beside it; see Deleting.
+- The whole keyboard, so a new binding can be checked against it: `1`/`v`/`Escape` select,
+  `h` hand, `2`/`a` arrow, `3`-`6` the quick shapes, `Delete`/`Backspace` delete the selection
+  and `Enter` renames it, all in `Canvas`; `cmd+Z`/`cmd+shift+Z` in `CodePane`; `cmd+O` and
+  `cmd+S` in `App`. Three listeners rather than one because each owns different state, and
+  they are only safe apart because none of them handles the same key.
 
 ### Shapes
 
