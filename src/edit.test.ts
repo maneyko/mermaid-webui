@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { labelOf, quoteLabel, renameLabel, unquoteLabel } from './edit'
+import { connectNodes, labelOf, quoteLabel, renameLabel, unquoteLabel } from './edit'
 
 const SOURCE = `flowchart TD
   A[Christmas] -->|Get money| B(Go shopping)
@@ -55,6 +55,31 @@ test('reads back the label that is on screen', () => {
   expect(labelOf(SOURCE, 'C')).toBe('Let me think')
   expect(labelOf('flowchart TD\n  A --> B\n', 'B')).toBe('B')
   expect(labelOf('flowchart TD\n  A["a|b"] --> B\n', 'A')).toBe('a|b')
+})
+
+test('connecting appends one line and leaves the rest untouched', () => {
+  expect(connectNodes(SOURCE, 'B', 'C')).toBe(`${SOURCE}  B --> C\n`)
+})
+
+test('an appended connection matches the existing indentation', () => {
+  const deep = 'flowchart TD\n      A --> B\n'
+  expect(connectNodes(deep, 'B', 'A')).toBe('flowchart TD\n      A --> B\n      B --> A\n')
+})
+
+test('connecting copes with a source that does not end in a newline', () => {
+  expect(connectNodes('flowchart TD\n  A --> B', 'B', 'C')).toBe(
+    'flowchart TD\n  A --> B\n  B --> C\n',
+  )
+})
+
+test('a self-connection is left to mermaid, which renders it as a loop', () => {
+  expect(connectNodes(SOURCE, 'A', 'A')).toContain('A --> A')
+})
+
+test('an appended connection is readable by the scanner', () => {
+  const next = connectNodes(SOURCE, 'B', 'C')
+  expect(labelOf(next, 'B')).toBe('Go shopping')
+  expect(labelOf(next, 'C')).toBe('Let me think')
 })
 
 test('an unknown node leaves the source untouched', () => {

@@ -193,6 +193,23 @@ recompute the spans, not carry them across.
   the rename overlay. `isTyping` checks for an enclosing `input`, `textarea` or
   `contenteditable` -- CodeMirror's editable surface is the last of those.
 
+### Connecting
+
+- The arrow tool starts a connect drag only when pointer-down lands on a node; on empty
+  canvas it falls through to panning. Dropping on empty space, or back on the source node,
+  cancels. Requiring two *different* nodes means a stray click cannot silently add a
+  self-loop -- `A --> A` is valid mermaid, but not something to create by accident.
+- The drop target is hit-tested by coordinate, because the connect drag holds pointer
+  capture. For the same reason `.rubber-band` must keep `pointer-events: none`: an overlay
+  spanning the canvas would answer every `elementFromPoint` query itself.
+- **`.rubber-band` needs explicit `width` and `height`, not just `inset: 0`.** An `svg` is a
+  replaced element, so `inset: 0` with `width: auto` resolves to its 300x150 intrinsic size
+  and `overflow: hidden` clips the rest of the line away. The DOM looks perfect while nothing
+  is drawn.
+- Duplicate connections are allowed. Mermaid renders `B --> C` twice as two arrows, which
+  looks odd but is the user's to undo; detecting duplicates would need edge scanning that
+  `connectNodes` otherwise does not require.
+
 ### Renaming
 
 - **Double-click hit-tests coordinates, not `event.target`.** `dblclick` retargets to the

@@ -1,4 +1,4 @@
-export type Tool = 'select' | 'hand'
+export type Tool = 'select' | 'hand' | 'arrow'
 
 interface ToolbarProps {
   tool: Tool
@@ -42,9 +42,29 @@ function HandIcon() {
   )
 }
 
+function ArrowIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 19 L19 5" />
+      <path d="M12 5 H19 V12" />
+    </svg>
+  )
+}
+
 const TOOLS: { tool: Tool; label: string; shortcut: string; icon: () => React.ReactElement }[] = [
   { tool: 'select', label: 'Select', shortcut: '1', icon: CursorIcon },
   { tool: 'hand', label: 'Hand', shortcut: 'H', icon: HandIcon },
+  { tool: 'arrow', label: 'Arrow', shortcut: '2', icon: ArrowIcon },
 ]
 
 export default function Toolbar({

@@ -106,14 +106,44 @@ body {
 
 /* mermaid injects a stylesheet into every SVG it renders, scoped by the render id, so its
    `#mermaid-7 .node polygon` outranks anything we can write here. !important is the override,
-   not laziness. */
+   not laziness. Selection and the arrow tool's connect ring share a treatment because the two
+   can never be on screen at once: the arrow tool cannot select. */
 .diagram g.node.selected rect,
 .diagram g.node.selected circle,
 .diagram g.node.selected ellipse,
 .diagram g.node.selected polygon,
-.diagram g.node.selected path {
+.diagram g.node.selected path,
+.diagram g.node.connect-target rect,
+.diagram g.node.connect-target circle,
+.diagram g.node.connect-target ellipse,
+.diagram g.node.connect-target polygon,
+.diagram g.node.connect-target path {
   stroke: var(--select) !important;
   stroke-width: 2.5px !important;
+}
+
+.canvas.tool-arrow,
+.canvas.tool-arrow .diagram g.node {
+  cursor: crosshair;
+}
+
+/* width and height are not redundant with inset: an svg is a replaced element, so `inset: 0`
+   with `width: auto` resolves to its 300x150 intrinsic size instead of stretching, and the
+   rest of the line gets clipped away.
+   pointer-events must stay none: the drop target is found by hit-testing coordinates, and an
+   overlay covering the canvas would answer every query. */
+.rubber-band {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.rubber-band line {
+  stroke: var(--select);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
 }
 
 .rename {

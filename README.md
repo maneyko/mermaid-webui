@@ -80,9 +80,10 @@ Worth reaching early rather than late.
 - [x] **6a. Tools.** A tool picker in the floating island: select (`1` / `v`) and hand
       (`h`), with `Escape` returning to select. Select clicks and renames; hand only pans.
       The viewport moved out into `usePanZoom`.
-- [ ] **6b. Connect two nodes by dragging.** With the arrow tool, hovering a node rings it;
-      drag from one node to another and a single `A --> B` line is appended. Dropping on
-      empty canvas cancels — an edge needs two endpoints.
+- [x] **6b. Connect two nodes by dragging.** With the arrow tool (`2` / `a`), hovering a node
+      rings it; drag from one node to another and a single `A --> B` line is appended,
+      indented to match. A dashed rubber band follows the cursor. Dropping on empty canvas —
+      or back on the node you started from — cancels.
 - [ ] **7. The other structural drags.** Reorder siblings by dragging one past another, and
       reparent a node by dragging it into a subgraph. Both need spans the scanner does not
       produce yet: whole statements rather than nodes.

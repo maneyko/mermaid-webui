@@ -25,6 +25,25 @@ export function labelOf(source: string, nodeId: string): string {
   return unquoteLabel(source.slice(node.labelFrom, node.labelTo))
 }
 
+const DEFAULT_INDENT = '  '
+
+// Copies the indentation of the last statement so an appended line matches the file it lands
+// in, rather than imposing a house style on someone else's formatting.
+function trailingIndent(source: string): string {
+  const lines = source.split('\n')
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index] ?? ''
+    if (line.trim() === '') continue
+    return /^\s*/.exec(line)?.[0] ?? DEFAULT_INDENT
+  }
+  return DEFAULT_INDENT
+}
+
+export function connectNodes(source: string, fromId: string, toId: string): string {
+  const body = source.endsWith('\n') || source === '' ? source : `${source}\n`
+  return `${body}${trailingIndent(source)}${fromId} --> ${toId}\n`
+}
+
 export function renameLabel(source: string, nodeId: string, label: string): string {
   const node = findNodes(source).get(nodeId)
   if (node === undefined) return source

@@ -22,10 +22,10 @@ const LABEL_FONT_SIZE = 16
 // flight when the next keystroke starts another one.
 let renderCount = 0
 
-function markSelected(container: HTMLDivElement | null, nodeId: string | null): void {
+function markNodes(container: HTMLDivElement | null, className: string, nodeId: string | null) {
   if (container === null) return
   for (const node of container.querySelectorAll('g.node')) {
-    node.classList.toggle('selected', nodeIdFromElement(node) === nodeId)
+    node.classList.toggle(className, nodeIdFromElement(node) === nodeId)
   }
 }
 
@@ -44,30 +44,66 @@ interface Editing {
   height: number
 }
 
+interface Point {
+  x: number
+  y: number
+}
+
+interface Connecting {
+  fromId: string
+  from: Point
+  to: Point
+}
+
 interface CanvasProps {
   source: string
   selected: string | null
   onSelect: (nodeId: string | null) => void
   onRename: (nodeId: string, label: string) => void
+  onConnect: (fromId: string, toId: string) => void
 }
 
-export default function Canvas({ source, selected, onSelect, onRename }: CanvasProps) {
+export default function Canvas({ source, selected, onSelect, onRename, onConnect }: CanvasProps) {
   const [tool, setTool] = useState<Tool>('select')
   const [editing, setEditing] = useState<Editing | null>(null)
+  const [hovered, setHovered] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState<Connecting | null>(null)
   const [error, setError] = useState<string | null>(null)
   const abandoned = useRef(false)
   const frame = useRef<HTMLDivElement>(null)
   const diagram = useRef<HTMLDivElement>(null)
-  // A pan ends with a click event we do not want to treat as a selection.
+  // A pan or a connect drag ends with a click event we do not want to act on.
   const panEndedHere = useRef(false)
 
   const panZoom = usePanZoom(frame)
   const { view } = panZoom
 
-  // Re-rendering replaces the whole SVG, so the selection has to be reapplied afterwards.
-  // Read through a ref to keep the render effect keyed on `source` alone.
+  // Re-rendering replaces the whole SVG, so the marks have to be reapplied afterwards. Read
+  // through refs to keep the render effect keyed on `source` alone.
   const latestSelected = useRef(selected)
   latestSelected.current = selected
+  const latestHovered = useRef(hovered)
+  latestHovered.current = hovered
+
+  // Frame-relative coordinates, which is what the rubber band overlay is positioned in.
+  const toFrame = (clientX: number, clientY: number): Point => {
+    const bounds = frame.current?.getBoundingClientRect()
+    return { x: clientX - (bounds?.left ?? 0), y: clientY - (bounds?.top ?? 0) }
+  }
+
+  // Hit-testing by coordinate rather than event target, because pointer capture during a
+  // connect drag retargets every pointer event at the canvas.
+  const nodeAt = (clientX: number, clientY: number) => {
+    const element = document.elementFromPoint(clientX, clientY)?.closest('g.node')
+    if (element == null) return null
+    const id = nodeIdFromElement(element)
+    return id === null ? null : { element, id }
+  }
+
+  const centreOf = (element: Element): Point => {
+    const bounds = element.getBoundingClientRect()
+    return toFrame(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)
+  }
 
   useEffect(() => {
     let stale = false
@@ -78,7 +114,8 @@ export default function Canvas({ source, selected, onSelect, onRename }: CanvasP
         if (stale) return
         if (diagram.current !== null) {
           diagram.current.innerHTML = svg
-          markSelected(diagram.current, latestSelected.current)
+          markNodes(diagram.current, 'selected', latestSelected.current)
+          markNodes(diagram.current, 'connect-target', latestHovered.current)
         }
         setError(null)
       } catch (cause) {
@@ -93,14 +130,24 @@ export default function Canvas({ source, selected, onSelect, onRename }: CanvasP
   }, [source])
 
   useEffect(() => {
-    markSelected(diagram.current, selected)
+    markNodes(diagram.current, 'selected', selected)
   }, [selected])
+
+  useEffect(() => {
+    markNodes(diagram.current, 'connect-target', hovered)
+  }, [hovered])
+
+  // Only the arrow tool rings nodes, so leaving it must clear any ring left behind.
+  useEffect(() => {
+    if (tool !== 'arrow') setHovered(null)
+  }, [tool])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTyping(event.target) || event.metaKey || event.ctrlKey || event.altKey) return
       if (event.key === '1' || event.key === 'v' || event.key === 'Escape') setTool('select')
       if (event.key === 'h') setTool('hand')
+      if (event.key === '2' || event.key === 'a') setTool('arrow')
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -126,10 +173,45 @@ export default function Canvas({ source, selected, onSelect, onRename }: CanvasP
       }}
       onPointerDown={(event) => {
         if (event.button !== 0) return
+
+        if (tool === 'arrow') {
+          const hit = nodeAt(event.clientX, event.clientY)
+          if (hit !== null) {
+            event.currentTarget.setPointerCapture(event.pointerId)
+            const from = centreOf(hit.element)
+            setConnecting({ fromId: hit.id, from, to: from })
+            return
+          }
+        }
+
         panZoom.begin(event)
       }}
-      onPointerMove={panZoom.move}
+      onPointerMove={(event) => {
+        if (connecting !== null) {
+          setConnecting({ ...connecting, to: toFrame(event.clientX, event.clientY) })
+          const hit = nodeAt(event.clientX, event.clientY)
+          setHovered(hit === null || hit.id === connecting.fromId ? null : hit.id)
+          return
+        }
+
+        if (tool === 'arrow') setHovered(nodeAt(event.clientX, event.clientY)?.id ?? null)
+        panZoom.move(event)
+      }}
       onPointerUp={(event) => {
+        if (connecting !== null) {
+          const hit = nodeAt(event.clientX, event.clientY)
+          setConnecting(null)
+          setHovered(null)
+          // Dropping on empty space, or back on the start, cancels. Requiring two different
+          // nodes means a stray click cannot silently add a self-loop.
+          if (hit !== null && hit.id !== connecting.fromId) {
+            onConnect(connecting.fromId, hit.id)
+            setTool('select')
+          }
+          panEndedHere.current = true
+          return
+        }
+
         panEndedHere.current = panZoom.end(event)
       }}
       // Selection rides on click rather than pointerup: pointer capture retargets pointer
@@ -175,6 +257,17 @@ export default function Canvas({ source, selected, onSelect, onRename }: CanvasP
       >
         <div className="diagram" ref={diagram} />
       </div>
+
+      {connecting !== null && (
+        <svg className="rubber-band">
+          <line
+            x1={connecting.from.x}
+            y1={connecting.from.y}
+            x2={connecting.to.x}
+            y2={connecting.to.y}
+          />
+        </svg>
+      )}
 
       <Toolbar
         tool={tool}
