@@ -275,10 +275,28 @@ recompute the spans, not carry them across.
   known issues. Every one of the 53 was then rendered in the browser to check mermaid accepts
   it and to draw the icon from what it actually looks like. Re-do both if mermaid is upgraded.
 - **Dragging out creates a connected node; clicking blank canvas creates a standalone one.**
-  Connected nodes land near the release point because their parent anchors them. A standalone
-  node is its own dagre component and will render wherever the layout puts it, which is
-  usually nowhere near the click. That is a known and accepted cost of asking for a node
-  before you know what it attaches to, not something to try to fix with positioning.
+- **The release point contributes nothing to where the node lands.** Releasing bottom-left of
+  `C` and releasing top-right of it produce the same three words of source, so dagre returns
+  the same layout. Measured on a six-node chart: a new child of `C` lands past its last
+  sibling and shifts `A`, `B` and `C` 73px right; a new child of a leaf lands directly below
+  it; a standalone lands on the top row to the right of everything. The drag is a *pointing*
+  gesture -- its only content is which node becomes the parent.
+- **So there is nothing honest to preview about position, and two things follow.** Adding a
+  node also resizes the SVG, and `.viewport` centres it, so *every* node on screen moves even
+  when nothing moved inside the diagram. Any preview drawn at the cursor would be promising a
+  spot that exists in neither the old layout nor the new one.
+- **What the ghost previews instead is attachment.** With the shape tool armed, a dashed
+  outline of the picked shape follows the cursor. Over a node it snaps to just below that node
+  and the rubber band joins the two -- drawn where the cursor is would put both ends of the
+  band in the same place and say nothing. Over empty canvas there is no band, and that absence
+  is the message: no band means standalone. Below rather than beside is the one approximation
+  in it, and it is only wrong-looking in an `LR` chart; reading the direction out of the source
+  would fix it if that ever grates.
+- **The pulse is the other half.** A node created by either gesture gets a `landed` class in
+  the same place the rename box is opened, and glows twice. It reports rather than predicts,
+  which is the only kind of feedback available here. It has to be a glow and not a ring: the
+  rename box opens at exactly the node's own bounds, so anything drawn on the outline would sit
+  under the box's border.
 - A doubled delimiter is one shape, not nesting -- see the label rules above. This matters
   most for circles: get it wrong and renaming `A((x))` silently emits `A(x)`.
 

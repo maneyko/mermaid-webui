@@ -73,12 +73,12 @@ const ICONS: Record<string, string> = {
 // Mermaid draws these two solid, and an outline of either is another shape in the list.
 const SOLID = new Set(['f-circ', 'fork'])
 
-export function ShapeIcon({ shape }: { shape: Shape }) {
+export function ShapeIcon({ shape, size = 15 }: { shape: Shape; size?: number }) {
   return (
     <svg
       viewBox="0 0 24 24"
-      width="15"
-      height="15"
+      width={size}
+      height={size}
       fill={SOLID.has(shape.key) ? 'currentColor' : 'none'}
       stroke="currentColor"
       strokeWidth="1.6"

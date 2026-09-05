@@ -15,6 +15,7 @@ import {
 import { usePanZoom } from './usePanZoom'
 import RenameOverlay, { type Anchor } from './RenameOverlay'
 import Toolbar, { type FileControls, type Tool } from './Toolbar'
+import { ShapeIcon } from './ShapeMenu'
 
 // useMaxWidth would make mermaid size the SVG to its container, which fights a viewport that
 // does its own scaling. Fixed natural dimensions leave zoom entirely to our transform.
@@ -140,6 +141,23 @@ interface Connecting {
   to: Point
 }
 
+// The shape a click would add, carried on the cursor. `from` is the node it would hang off, or
+// null when it would land on its own, and that is the whole reason to draw it: the release
+// point contributes nothing to where dagre puts the node, so the only honest thing to preview
+// is what it will be attached to.
+interface Ghost {
+  at: Point
+  from: Point | null
+}
+
+// Roughly a node's size at 100%, scaled with the viewport so it reads against the diagram.
+const GHOST_SIZE = 60
+
+// How far below a node the ghost sits when it would hang off it. Below rather than under the
+// cursor because a line drawn between two things in the same place says nothing, and below
+// rather than beside because that is what "descendant" looks like in the default direction.
+const GHOST_GAP = 26
+
 interface CanvasProps {
   source: string
   selected: EditTarget | null
@@ -171,12 +189,14 @@ export default function Canvas({
 }: CanvasProps) {
   const [tool, setTool] = useState<Tool>('select')
   const [shape, setShape] = useState<Shape>(QUICK_SHAPES[0] as Shape)
-  // A node added by dragging out does not exist in the DOM until the next render, so the
-  // rename it should open with is deferred until the SVG that contains it arrives.
-  const pendingRename = useRef<string | null>(null)
+  // A new node does not exist in the DOM until the next render, so what the canvas owes it --
+  // the rename box, and the pulse that says where the layout put it -- waits for the SVG that
+  // contains it.
+  const landed = useRef<string | null>(null)
   const [editing, setEditing] = useState<Editing | null>(null)
   const [hovered, setHovered] = useState<EditTarget | null>(null)
   const [connecting, setConnecting] = useState<Connecting | null>(null)
+  const [ghost, setGhost] = useState<Ghost | null>(null)
   const [error, setError] = useState<string | null>(null)
   const frame = useRef<HTMLDivElement>(null)
   const diagram = useRef<HTMLDivElement>(null)
@@ -255,6 +275,11 @@ export default function Canvas({
     return toFrame(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)
   }
 
+  const belowOf = (element: Element): Point => {
+    const bounds = element.getBoundingClientRect()
+    return toFrame(bounds.left + bounds.width / 2, bounds.bottom + GHOST_GAP * view.scale)
+  }
+
   const openEditorOn = (element: Element, target: Renameable, label: string) => {
     if (frame.current === null) return
     const bounds = element.getBoundingClientRect()
@@ -299,13 +324,18 @@ export default function Canvas({
           mark(diagram.current, 'selected', latestSelected.current)
           mark(diagram.current, 'connect-target', latestHovered.current)
 
-          const pending = pendingRename.current
-          if (pending !== null) {
-            pendingRename.current = null
+          const created = landed.current
+          if (created !== null) {
+            landed.current = null
             const added = [...diagram.current.querySelectorAll('g.node')].find(
-              (node) => nodeIdFromElement(node) === pending,
+              (node) => nodeIdFromElement(node) === created,
             )
-            if (added !== undefined) openEditorOn(added, { kind: 'node', nodeId: pending }, '')
+            if (added !== undefined) {
+              // Adding a node reflows the whole diagram, so every node on screen has just
+              // moved. The pulse is what says which of them is the new one.
+              added.classList.add('landed')
+              openEditorOn(added, { kind: 'node', nodeId: created }, '')
+            }
           }
         }
         setError(null)
@@ -331,6 +361,7 @@ export default function Canvas({
   // The hand tool acts on the canvas rather than on any node, so it rings nothing.
   useEffect(() => {
     if (tool === 'hand') setHovered(null)
+    if (tool !== 'shape') setGhost(null)
   }, [tool])
 
   useEffect(() => {
@@ -364,6 +395,15 @@ export default function Canvas({
   const classes = ['canvas', `tool-${tool}`]
   if (panZoom.panning) classes.push('panning')
 
+  // The dashed line, whether it is following a real drag or only showing what a hover would
+  // attach to. Both mean the same thing, so they are one drawing.
+  const band =
+    connecting !== null
+      ? { from: connecting.from, to: connecting.to }
+      : ghost !== null && ghost.from !== null
+        ? { from: ghost.from, to: ghost.at }
+        : null
+
   return (
     <section
       className={classes.join(' ')}
@@ -389,30 +429,50 @@ export default function Canvas({
       }}
       onPointerMove={(event) => {
         if (connecting !== null) {
-          setConnecting({ ...connecting, to: toFrame(event.clientX, event.clientY) })
+          const to = toFrame(event.clientX, event.clientY)
+          setConnecting({ ...connecting, to })
           const hit = nodeAt(event.clientX, event.clientY)
           hover(hit === null || hit.id === connecting.fromId ? null : nodeTarget(hit))
+          if (tool === 'shape') setGhost({ at: to, from: connecting.from })
           return
         }
 
         // Hovering rings whatever a click or a drag would act on. Only select acts on edge
         // labels; the arrow and shape tools drag out from a node, so they ring nodes alone.
-        if (tool === 'select') hover(targetAt(event.clientX, event.clientY)?.target ?? null)
-        else if (tool !== 'hand') hover(nodeTarget(nodeAt(event.clientX, event.clientY)))
+        if (tool === 'select') {
+          hover(targetAt(event.clientX, event.clientY)?.target ?? null)
+        } else if (tool !== 'hand') {
+          const hit = nodeAt(event.clientX, event.clientY)
+          hover(nodeTarget(hit))
+          // Over a node the ghost snaps below it, joined by the band, so what is on screen is
+          // the attachment rather than a position nothing can promise. Over empty canvas it
+          // follows the cursor with no band, which is what standalone looks like.
+          if (tool === 'shape') {
+            setGhost(
+              hit === null
+                ? { at: toFrame(event.clientX, event.clientY), from: null }
+                : { at: belowOf(hit.element), from: centreOf(hit.element) },
+            )
+          }
+        }
         panZoom.move(event)
       }}
+      onPointerLeave={() => setGhost(null)}
       onPointerUp={(event) => {
         if (connecting !== null) {
           const hit = nodeAt(event.clientX, event.clientY)
           setConnecting(null)
           setHovered(null)
+          // A cancelled drag would otherwise leave the band hanging off its source node until
+          // the pointer moved again.
+          setGhost(null)
           panEndedHere.current = true
 
           if (tool === 'shape') {
             // Empty space is where a new node goes; releasing on a node is the arrow tool's
             // gesture, not this one.
             if (hit === null) {
-              pendingRename.current = onAddNode(connecting.fromId, shape)
+              landed.current = onAddNode(connecting.fromId, shape)
               setTool('select')
             }
             return
@@ -447,7 +507,7 @@ export default function Canvas({
           // Blank canvas is the only place a standalone node can be asked for; a click on a
           // node belongs to the drag-out gesture, which pointerup already handled.
           if (under.closest('g.node') === null) {
-            pendingRename.current = onAddStandalone(shape)
+            landed.current = onAddStandalone(shape)
             setTool('select')
           }
           return
@@ -478,15 +538,16 @@ export default function Canvas({
         <div className="diagram" ref={diagram} />
       </div>
 
-      {connecting !== null && (
+      {band !== null && (
         <svg className="rubber-band">
-          <line
-            x1={connecting.from.x}
-            y1={connecting.from.y}
-            x2={connecting.to.x}
-            y2={connecting.to.y}
-          />
+          <line x1={band.from.x} y1={band.from.y} x2={band.to.x} y2={band.to.y} />
         </svg>
+      )}
+
+      {tool === 'shape' && ghost !== null && (
+        <div className="shape-ghost" style={{ left: ghost.at.x, top: ghost.at.y }}>
+          <ShapeIcon shape={shape} size={GHOST_SIZE * view.scale} />
+        </div>
       )}
 
       <Toolbar

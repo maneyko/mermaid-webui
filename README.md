@@ -156,6 +156,15 @@ viable at all; everything before it was chrome.
       shape, because mermaid lets one outrank the delimiters and it would otherwise silently
       win over the shape you picked.
 
+- [x] **17. Say what a click will add, not where.** With a shape armed, a dashed ghost of it
+      follows the cursor; pass over a node and the ghost snaps below it with the rubber band
+      joining the two, so you can see it would be a child of that node before committing to the
+      drag. Over empty canvas there is no band, which is what standalone looks like. The
+      position is never previewed, because the release point contributes nothing to it — the
+      same three words of source are written wherever you let go. The new node pulses once it
+      arrives, which is the only honest half of that: it reports where dagre put it instead of
+      guessing beforehand.
+
 Not done yet, roughly in the order I would take them:
 
 - [ ] **Import and export for browsers without the File System Access API.** A download link
@@ -196,11 +205,13 @@ offering connection points — four points would imply a choice that cannot be e
   and `[]`. `|` pairs are fine. The tokenizer in `src/mermaidLanguage.ts` returns the opener
   as `punctuation` and then consumes the label *and* its closing delimiter in one run that it
   reports as `string`. The closer needs emitting as its own token.
-- **A standalone node does not appear where you clicked.** It has no edges, so dagre lays it
-  out as a separate component and places it wherever it likes. Nothing can be done about the
-  position without abandoning auto-layout; the rename box does at least follow the node to
-  wherever it actually landed. Nodes left behind by a delete land the same way, for the same
-  reason — they really have no edges any more.
+- **No new node appears where you clicked, and a standalone one is not even close.** The
+  release point never reaches the source, so dagre gets the same graph whichever way you
+  dragged: a new child lands past its parent's last sibling, and a standalone lands on the top
+  row to the right of everything. Adding either one also reflows the diagram. Nothing can be
+  done about that without abandoning auto-layout, so the interface does not try to predict it
+  — the ghost shows what the node will be *attached to*, and the new node pulses once it has
+  landed. Nodes left behind by a delete move for the same reason.
 - **Deleting a node listed in a shared `class` line takes the whole line.** `class A,B big`
   names two nodes; deleting A removes the statement, so B quietly loses its class. Splitting
   the id list would fix it. Not reachable from the canvas, since nothing writes `class`.
