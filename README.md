@@ -4,11 +4,11 @@ A drag-and-drop WYSIWYG editor for [mermaid](https://mermaid.js.org) diagrams. C
 the left, live diagram on the right, tool picker on top. Runs entirely in the browser with no
 backend.
 
-**Status: it edits.** Click a node to select it and rename it in place; drag between nodes to
-connect them; drag out from one to add a new node; pick a shape to restyle what is selected;
-delete a node and its edges. Every change rewrites the source with the smallest possible edit.
-What is missing is deleting an edge on its own, undo outside the code pane, and saving your
-work. See [Work items](#work-items).
+**Status: it edits.** Click a node or an edge label to select it, double-click to rename it in
+place; drag between nodes to connect them; drag out from one to add a new node; pick a shape to
+restyle what is selected; delete a node and its edges; undo from anywhere with cmd+Z. Every
+change rewrites the source with the smallest possible edit. What is missing is deleting an edge
+on its own, and saving your work. See [Work items](#work-items).
 
 ## Why this is not a whiteboard
 
@@ -89,9 +89,9 @@ viable at all; everything before it was chrome.
       shape appears, with the rename box already open on it. It is created *connected* so
       dagre places it near where you released — a disconnected node would be parked
       somewhere else entirely, since position is never ours to choose.
-- [x] **8. Click to edit, and standalone shapes.** In select mode a single click opens the
-      rename box on a node or an edge label — dragging is the only other thing a click could
-      mean, so there is no reason to make renaming wait for a second one. In a shape mode,
+- [x] **8. Click to edit, and standalone shapes.** A single click opened the rename box
+      directly, on the reasoning that dragging was the only other thing a click could mean.
+      That held until delete existed — see item 10, which took it back. In a shape mode,
       clicking blank canvas creates a standalone node of that shape. Hovering rings whatever
       a click would act on, under every tool except the hand.
 
@@ -104,19 +104,22 @@ viable at all; everything before it was chrome.
       node back as a blank box. This is also what gave the scanner statement spans, which the
       structural drags below need.
 
+- [x] **10. Select, then act.** A single click now *only* selects — a node or an edge label —
+      and renaming moved to double-click. Item 8 had merged the two, which was right until
+      delete arrived: clicking a node put a text input under the cursor, and that input
+      swallowed the Delete key. Hovering rings edge labels the way it already ringed nodes,
+      and selecting one reveals the text between its pipes in the code pane.
+- [x] **11. Undo from anywhere.** cmd+Z and cmd+shift+Z reach CodeMirror's history from the
+      canvas, so a misjudged delete or drag takes one keystroke to take back. Canvas edits
+      were always in the history; only the keymap's scope was in the way.
+
 Not done yet, roughly in the order I would take them:
 
-- [ ] **Delete an edge.** Only whole nodes can be deleted so far. Edges are not selectable at
-      all: a click hit-tests nodes and edge labels, and an unlabelled edge has no clickable
-      target. Needs hit-testing on the `path.flowchart-link` elements, a selection that is not
-      a node, and a ring that can highlight one. The source half is mostly done — removing an
-      edge orphans nodes exactly the way removing a node does, and `deleteNode` already has
-      that machinery.
-- [ ] **Undo from the canvas.** Canvas edits *are* undoable — they go through CodeMirror's
-      history like any other change — but only while the code pane has focus, because that is
-      where the keymap lives. After a misjudged drag, cmd+Z on the canvas does nothing. Needs
-      a window-level binding that routes undo into the editor, and a matching redo. More
-      valuable now that a single click can delete four edges.
+- [ ] **Delete an edge.** Only whole nodes can be deleted so far. An edge is only selectable
+      through its label, and an unlabelled edge has no clickable target at all. Needs
+      hit-testing on the `path.flowchart-link` elements and a ring that can highlight one. The
+      source half is mostly done — removing an edge orphans nodes exactly the way removing a
+      node does, and `deleteNode` already has that machinery.
 - [ ] **The other structural drags.** Reorder siblings by dragging one past another, and
       reparent a node by dragging it into a subgraph. Reparenting needs subgraph hit-testing,
       since subgraphs render as `g.cluster` and nothing selects those. The statement spans

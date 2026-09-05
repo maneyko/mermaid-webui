@@ -129,6 +129,28 @@ body {
   stroke-width: 3px !important;
 }
 
+/* An edge label is HTML inside a foreignObject, not SVG, so it rings with an outline rather
+   than a stroke. Outline takes no layout, which matters here: the label sits on top of its
+   edge and anything that resized it would shift the text off the line.
+   The foreignObject is sized exactly to the label and clips to it, so without overflow the
+   ring is drawn and then cropped away entirely -- the styles all compute, and nothing shows. */
+.diagram g.edgeLabel foreignObject {
+  overflow: visible;
+}
+
+.diagram g.edgeLabel .labelBkg {
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.diagram g.edgeLabel.connect-target .labelBkg {
+  outline: 1.8px solid var(--select);
+}
+
+.diagram g.edgeLabel.selected .labelBkg {
+  outline: 3px solid var(--select);
+}
+
 .canvas.tool-arrow,
 .canvas.tool-arrow .diagram g.node,
 .canvas.tool-shape,

@@ -185,6 +185,14 @@ keeping:
 - **The selection ring needs `!important`.** Mermaid injects a stylesheet into every SVG it
   renders, scoped by render id, so `#mermaid-7 .node polygon` outranks any selector we can
   write against a class. This is the one place `!important` is correct.
+- **An edge label is HTML, not SVG**, so it rings with a CSS `outline` on its `.labelBkg`
+  rather than a stroke -- the structure is
+  `g.edgeLabel > g.label > foreignObject > div.labelBkg`. The `foreignObject` is sized
+  exactly to the label and clips to it, so the ring needs `overflow: visible` on it or it is
+  drawn and then cropped away: every style computes correctly and nothing appears on screen.
+- **Hover state is an object now, so it must be compared by value.** It is set on every
+  pointer move, and returning a fresh `{kind, nodeId}` each time re-renders the canvas
+  continuously. `sameTarget` in the state updater is what makes React bail out.
 
 Re-rendering replaces the whole SVG, so the selection class is reapplied after every render.
 `Canvas` reads the current selection through a ref to keep the render effect keyed on
@@ -244,10 +252,15 @@ recompute the spans, not carry them across.
 
 ### Renaming
 
-- **A single click opens the rename box**; there is no double-click path any more. Dragging
-  is the only other thing a click on a node could mean, so making renaming wait for a second
-  click bought nothing. Clicking a node also selects it, because the shape buttons restyle
-  the selection and would otherwise have nothing to act on.
+- **A click selects; a double-click renames.** These were briefly the same gesture, on the
+  reasoning that dragging was the only other thing a click could mean. Delete disproved it:
+  a click that opens a text input means the selection can never be acted on by a keystroke,
+  because the input has the keyboard. Anything that adds a shortcut acting on the selection
+  runs into the same wall, so the two gestures stay apart.
+- **Both work on an edge label as well as a node.** `EditTarget` is the union, and it is what
+  selection, hover and the rename overlay are all keyed on. A node selection additionally
+  drives the shape buttons and delete, which is why `Canvas` narrows it to `selectedNode`;
+  an edge label is selectable but is not a node and must not reach those.
 - The overlay stops `click` as well as `pointerdown`. Without that, clicking inside the box
   reaches the canvas as a click on whatever sits behind it and reopens the editor.
 - **`CLICK_SLOP` is 10px, and it is not arbitrary.** Every press begins a pan, so a press
@@ -280,11 +293,28 @@ inside an edge statement. Four things it turns on:
 
 The UI half has one trap worth keeping:
 
-- **A click opens the node's rename box, and that box swallows Delete.** The keyboard binding
-  alone looked right in review and was completely unreachable in the app: clicking the node
-  to select it puts an `input` under the cursor, so the keystroke edits the label instead.
-  That is what the trash button in the island is for. The key still works once the box is
-  dismissed with Escape, which closes it without clearing the selection.
+- **A click used to open the node's rename box, and that box swallowed Delete.** The keyboard
+  binding looked right in review and was unreachable in the app: clicking the node to select
+  it put an `input` under the cursor, so the keystroke edited the label instead. The fix was
+  to split the gestures (see Renaming); the trash button in the island dates from before that
+  and stays, because a destructive action wants a visible affordance.
+
+### Undo
+
+- **Undo is a `window` keydown listener in `CodePane`, not a CodeMirror keymap entry.** The
+  keymap only sees keystrokes while the editor has focus, and after a canvas edit the focus
+  is anywhere but there. Canvas edits were always in the history; only its reach was wrong.
+- **The listener must call `preventDefault` even when it declines to act**, and this took a
+  long time to find. Chrome's native undo reaches CodeMirror through its `beforeinput`
+  `historyUndo` handling, so a cmd+Z the page leaves alone still rewrites the document. The
+  symptom is baffling: the handler provably returns early -- log it and you will see the
+  guard fire -- and the document is undone anyway, by the browser rather than by us. Anything
+  added here that wants to *not* handle cmd+Z still has to suppress the default.
+- The cost of that is the rename overlay losing its own native text undo, which is the right
+  way round: Escape already cancels a rename, and the alternative is cmd+Z inside a small
+  text box silently rewriting the whole diagram.
+- While the editor *does* have focus the listener returns without preventing anything, so
+  CodeMirror handles it once. Check this after touching it -- the failure is a double undo.
 
 ### Testing interactions
 

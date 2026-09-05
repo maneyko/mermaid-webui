@@ -35,11 +35,25 @@ function textWidth(text: string, fontSize: number): number {
 // flight when the next keystroke starts another one.
 let renderCount = 0
 
-function markNodes(container: HTMLDivElement | null, className: string, nodeId: string | null) {
+// An unlabelled edge still emits a `g.edgeLabel`, but an empty one has nothing to point at,
+// so the clickable labels are the non-empty ones.
+function renderedEdgeLabels(container: HTMLDivElement | null): Element[] {
+  return [...(container?.querySelectorAll('g.edgeLabels > g.edgeLabel') ?? [])].filter(
+    (label) => label.textContent?.trim() !== '',
+  )
+}
+
+function mark(container: HTMLDivElement | null, className: string, target: EditTarget | null) {
   if (container === null) return
+
   for (const node of container.querySelectorAll('g.node')) {
-    node.classList.toggle(className, nodeIdFromElement(node) === nodeId)
+    const mine = target?.kind === 'node' && nodeIdFromElement(node) === target.nodeId
+    node.classList.toggle(className, mine)
   }
+
+  renderedEdgeLabels(container).forEach((label, index) => {
+    label.classList.toggle(className, target?.kind === 'edge' && target.index === index)
+  })
 }
 
 // Rendered edge labels carry no id, so the only key is position: the k-th non-empty label on
@@ -47,31 +61,18 @@ function markNodes(container: HTMLDivElement | null, className: string, nodeId: 
 // length, so a mismatch -- syntax the scanner does not understand -- declines the edit rather
 // than renaming some other edge.
 function edgeLabelIndex(element: Element, source: string, container: HTMLDivElement | null) {
-  const rendered = [...(container?.querySelectorAll('g.edgeLabels > g.edgeLabel') ?? [])].filter(
-    (label) => label.textContent?.trim() !== '',
-  )
+  const rendered = renderedEdgeLabels(container)
   if (rendered.length !== edgeLabelCount(source)) return null
   const index = rendered.indexOf(element)
   return index === -1 ? null : index
 }
 
-function editTargetFor(hit: Element, source: string, container: HTMLDivElement | null) {
-  const node = hit.closest('g.node')
-  if (node !== null) {
-    const nodeId = nodeIdFromElement(node)
-    if (nodeId === null) return null
-    return { element: node, target: { kind: 'node', nodeId } as const, label: labelOf(source, nodeId) }
-  }
-
-  const edgeLabel = hit.closest('g.edgeLabel')
-  if (edgeLabel === null) return null
-  const index = edgeLabelIndex(edgeLabel, source, container)
-  if (index === null) return null
-  return {
-    element: edgeLabel,
-    target: { kind: 'edge', index } as const,
-    label: edgeLabelOf(source, index),
-  }
+// Hover runs on every pointer move, so an unchanged target has to compare equal or React
+// re-renders the canvas continuously.
+function sameTarget(a: EditTarget | null, b: EditTarget | null): boolean {
+  if (a === null || b === null) return a === b
+  if (a.kind === 'node' && b.kind === 'node') return a.nodeId === b.nodeId
+  return a.kind === 'edge' && b.kind === 'edge' && a.index === b.index
 }
 
 // Shortcuts must not fire while the user is typing in the editor or the rename overlay.
@@ -79,7 +80,7 @@ function isTyping(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('input, textarea, [contenteditable="true"]') !== null
 }
 
-type EditTarget = { kind: 'node'; nodeId: string } | { kind: 'edge'; index: number }
+export type EditTarget = { kind: 'node'; nodeId: string } | { kind: 'edge'; index: number }
 
 interface Editing {
   target: EditTarget
@@ -104,8 +105,8 @@ interface Connecting {
 
 interface CanvasProps {
   source: string
-  selected: string | null
-  onSelect: (nodeId: string | null) => void
+  selected: EditTarget | null
+  onSelect: (target: EditTarget | null) => void
   onRename: (nodeId: string, label: string) => void
   onRenameEdge: (index: number, label: string) => void
   onConnect: (fromId: string, toId: string) => void
@@ -133,7 +134,7 @@ export default function Canvas({
   // rename it should open with is deferred until the SVG that contains it arrives.
   const pendingRename = useRef<string | null>(null)
   const [editing, setEditing] = useState<Editing | null>(null)
-  const [hovered, setHovered] = useState<string | null>(null)
+  const [hovered, setHovered] = useState<EditTarget | null>(null)
   const [connecting, setConnecting] = useState<Connecting | null>(null)
   const [error, setError] = useState<string | null>(null)
   const abandoned = useRef(false)
@@ -167,6 +168,35 @@ export default function Canvas({
     return id === null ? null : { element, id }
   }
 
+  // Everything the select tool acts on: a node, or an edge label the scanner can place.
+  const targetAt = (clientX: number, clientY: number) => {
+    const hit = document.elementFromPoint(clientX, clientY)
+    if (hit == null) return null
+
+    const node = hit.closest('g.node')
+    if (node !== null) {
+      const nodeId = nodeIdFromElement(node)
+      return nodeId === null ? null : { element: node, target: { kind: 'node', nodeId } as EditTarget }
+    }
+
+    const label = hit.closest('g.edgeLabel')
+    if (label === null) return null
+    const index = edgeLabelIndex(label, source, diagram.current)
+    return index === null ? null : { element: label, target: { kind: 'edge', index } as EditTarget }
+  }
+
+  const labelFor = (target: EditTarget) =>
+    target.kind === 'node' ? labelOf(source, target.nodeId) : edgeLabelOf(source, target.index)
+
+  const hover = (next: EditTarget | null) =>
+    setHovered((current) => (sameTarget(current, next) ? current : next))
+
+  const nodeTarget = (hit: { id: string } | null): EditTarget | null =>
+    hit === null ? null : { kind: 'node', nodeId: hit.id }
+
+  // The shape buttons and delete act on a node; an edge label is selectable but is not one.
+  const selectedNode = selected?.kind === 'node' ? selected.nodeId : null
+
   const centreOf = (element: Element): Point => {
     const bounds = element.getBoundingClientRect()
     return toFrame(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)
@@ -190,8 +220,8 @@ export default function Canvas({
   // With a node selected the shape buttons restyle it; with nothing selected they arm the
   // shape tool, and a node of that shape is created by dragging out from an existing one.
   const pickShape = (picked: Shape) => {
-    if (selected !== null) {
-      onSetShape(selected, picked)
+    if (selectedNode !== null) {
+      onSetShape(selectedNode, picked)
       return
     }
     setShape(picked)
@@ -211,8 +241,8 @@ export default function Canvas({
         if (stale) return
         if (diagram.current !== null) {
           diagram.current.innerHTML = svg
-          markNodes(diagram.current, 'selected', latestSelected.current)
-          markNodes(diagram.current, 'connect-target', latestHovered.current)
+          mark(diagram.current, 'selected', latestSelected.current)
+          mark(diagram.current, 'connect-target', latestHovered.current)
 
           const pending = pendingRename.current
           if (pending !== null) {
@@ -236,11 +266,11 @@ export default function Canvas({
   }, [source])
 
   useEffect(() => {
-    markNodes(diagram.current, 'selected', selected)
+    mark(diagram.current, 'selected', selected)
   }, [selected])
 
   useEffect(() => {
-    markNodes(diagram.current, 'connect-target', hovered)
+    mark(diagram.current, 'connect-target', hovered)
   }, [hovered])
 
   // The hand tool acts on the canvas rather than on any node, so it rings nothing.
@@ -255,10 +285,10 @@ export default function Canvas({
       if (event.key === 'h') setTool('hand')
       if (event.key === '2' || event.key === 'a') setTool('arrow')
 
-      const selectedNode = latestSelected.current
-      if ((event.key === 'Backspace' || event.key === 'Delete') && selectedNode !== null) {
+      const current = latestSelected.current
+      if ((event.key === 'Backspace' || event.key === 'Delete') && current?.kind === 'node') {
         event.preventDefault()
-        latestDelete.current(selectedNode)
+        latestDelete.current(current.nodeId)
       }
 
       const shapeIndex = ['3', '4', '5', '6'].indexOf(event.key)
@@ -306,13 +336,14 @@ export default function Canvas({
         if (connecting !== null) {
           setConnecting({ ...connecting, to: toFrame(event.clientX, event.clientY) })
           const hit = nodeAt(event.clientX, event.clientY)
-          setHovered(hit === null || hit.id === connecting.fromId ? null : hit.id)
+          hover(hit === null || hit.id === connecting.fromId ? null : nodeTarget(hit))
           return
         }
 
-        // Every tool that does something to a node under the cursor rings it, so hovering
-        // tells you what a click or a drag would act on.
-        if (tool !== 'hand') setHovered(nodeAt(event.clientX, event.clientY)?.id ?? null)
+        // Hovering rings whatever a click or a drag would act on. Only select acts on edge
+        // labels; the arrow and shape tools drag out from a node, so they ring nodes alone.
+        if (tool === 'select') hover(targetAt(event.clientX, event.clientY)?.target ?? null)
+        else if (tool !== 'hand') hover(nodeTarget(nodeAt(event.clientX, event.clientY)))
         panZoom.move(event)
       }}
       onPointerUp={(event) => {
@@ -369,18 +400,18 @@ export default function Canvas({
 
         if (tool !== 'select') return
 
-        // Dragging is the only other thing a click could have meant, so there is no reason to
-        // make renaming wait for a second one.
-        const found = editTargetFor(under, source, diagram.current)
-        if (found === null) {
-          onSelect(null)
-          return
-        }
-
-        // Clicking an edge label is still a move away from whatever node was selected, so the
-        // selection has to follow the click rather than linger on the previous node.
-        onSelect(found.target.kind === 'node' ? found.target.nodeId : null)
-        openEditorOn(found.element, found.target, found.label)
+        // A click selects and only selects. Renaming needs a gesture of its own now that
+        // selection is what delete acts on -- a click that opened an input made the Delete
+        // key unreachable, because the input swallowed it.
+        onSelect(targetAt(event.clientX, event.clientY)?.target ?? null)
+      }}
+      // dblclick retargets to the common ancestor of its two clicks, which for a mermaid node
+      // is the canvas, so this hit-tests coordinates like everything else here.
+      onDoubleClick={(event) => {
+        if (tool !== 'select') return
+        const found = targetAt(event.clientX, event.clientY)
+        if (found === null) return
+        openEditorOn(found.element, found.target, labelFor(found.target))
       }}
     >
       <div
@@ -406,9 +437,9 @@ export default function Canvas({
         onToolChange={setTool}
         shape={shape}
         onPickShape={pickShape}
-        hasSelection={selected !== null}
+        hasSelection={selectedNode !== null}
         onDelete={() => {
-          if (selected !== null) onDelete(selected)
+          if (selectedNode !== null) onDelete(selectedNode)
         }}
         scale={view.scale}
         onZoomIn={panZoom.zoomIn}

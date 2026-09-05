@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { EditorState } from '@codemirror/state'
 import { EditorView, drawSelection, keymap, lineNumbers } from '@codemirror/view'
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap, redo, undo } from '@codemirror/commands'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { mermaidLanguage } from './mermaidLanguage'
 
@@ -53,6 +53,35 @@ export default function CodePane({ source, onChange, reveal }: CodePaneProps) {
       editor.destroy()
       view.current = null
     }
+  }, [])
+
+  // Canvas edits go through this editor's history like any other change, but the keymap that
+  // reaches it is scoped to the editor, so cmd+Z did nothing unless the code pane had focus --
+  // which is never where you are after a misjudged drag. This routes it in from anywhere.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return
+
+      const editor = view.current
+      // While the editor has focus its own keymap handles this, and suppresses the default
+      // itself. Anywhere else the default has to be stopped here, whether or not the
+      // keystroke is ours to act on: the browser's native undo reaches CodeMirror through
+      // its beforeinput handling, so leaving it alone rewrites the document behind our back.
+      if (editor === null || editor.hasFocus) return
+      event.preventDefault()
+
+      // The rename overlay is a field of its own. It loses its native text undo to the line
+      // above, which is the right trade -- Escape is how you take back an edit in there, and
+      // the alternative is cmd+Z silently rewriting the whole diagram from a text box.
+      if (event.target instanceof Element && event.target.closest('input, textarea') !== null) {
+        return
+      }
+
+      ;(event.shiftKey ? redo : undo)(editor)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   // Only fires for edits that did not come from typing here -- a canvas-driven rewrite in a

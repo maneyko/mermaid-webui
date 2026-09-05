@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import CodePane, { type Range } from './CodePane'
-import Canvas from './Canvas'
-import { findNodes } from './correlate'
+import Canvas, { type EditTarget } from './Canvas'
+import { findEdgeLabels, findNodes } from './correlate'
 import {
   addConnectedNode,
   addStandaloneNode,
@@ -22,18 +22,20 @@ const INITIAL_SOURCE = `flowchart TD
 
 export default function App() {
   const [source, setSource] = useState(INITIAL_SOURCE)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<EditTarget | null>(null)
   const [reveal, setReveal] = useState<Range | null>(null)
 
-  const select = (nodeId: string | null) => {
-    setSelected(nodeId)
-    if (nodeId === null) {
-      setReveal(null)
-      return
-    }
+  // A node reveals its whole declaration; an edge label reveals the text between its pipes,
+  // which is the only part of that statement the label owns.
+  const spanOf = (target: EditTarget): Range | null => {
+    if (target.kind === 'edge') return findEdgeLabels(source)[target.index] ?? null
+    const node = findNodes(source).get(target.nodeId)
+    return node === undefined ? null : { from: node.from, to: node.to }
+  }
 
-    const node = findNodes(source).get(nodeId)
-    setReveal(node === undefined ? null : { from: node.from, to: node.to })
+  const select = (target: EditTarget | null) => {
+    setSelected(target)
+    setReveal(target === null ? null : spanOf(target))
   }
 
   return (
