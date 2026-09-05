@@ -215,9 +215,12 @@ recompute the spans, not carry them across.
   canvas it falls through to panning. Dropping on empty space, or back on the source node,
   cancels. Requiring two *different* nodes means a stray click cannot silently add a
   self-loop -- `A --> A` is valid mermaid, but not something to create by accident.
-- The drop target is hit-tested by coordinate, because the connect drag holds pointer
-  capture. For the same reason `.rubber-band` must keep `pointer-events: none`: an overlay
-  spanning the canvas would answer every `elementFromPoint` query itself.
+- Every hit test in `Canvas` goes through `document.elementFromPoint`, never `event.target`.
+  Panning captures the pointer on every press, and capture retargets the compatibility mouse
+  events -- `click` included -- at the capturing element.
+- Because everything is hit-tested by coordinate, `.rubber-band` must keep
+  `pointer-events: none`: an overlay spanning the canvas would answer every
+  `elementFromPoint` query itself.
 - **`.rubber-band` needs explicit `width` and `height`, not just `inset: 0`.** An `svg` is a
   replaced element, so `inset: 0` with `width: auto` resolves to its 300x150 intrinsic size
   and `overflow: hidden` clips the rest of the line away. The DOM looks perfect while nothing
@@ -234,6 +237,25 @@ recompute the spans, not carry them across.
   the selection and would otherwise have nothing to act on.
 - The overlay stops `click` as well as `pointerdown`. Without that, clicking inside the box
   reaches the canvas as a click on whatever sits behind it and reopens the editor.
+- **`CLICK_SLOP` is 10px, and it is not arbitrary.** Every press begins a pan, so a press
+  that travels further than the slop is a pan and its click is suppressed. At 4px an ordinary
+  human click -- which drifts a few pixels, more on a trackpad -- nudged the canvas and was
+  then swallowed, so clicking a node appeared to do nothing at all. Do not tighten it without
+  clicking around with a real mouse afterwards.
+
+### Testing interactions
+
+Synthetic `MouseEvent`s are useful but they are **not** the same as a real mouse, and twice
+now they have hidden a bug that a person hit immediately:
+
+- They travel 0px, so they never trip the pan slop above.
+- They never establish pointer capture, so they do not reproduce the retargeting it causes.
+
+Two habits that make synthetic testing honest here. Dispatch the event **on the canvas
+section with `clientX`/`clientY` over the target**, rather than on the target element -- that
+is what capture does to a real click, and code that reads `event.target` fails it. And after
+any change to a gesture, drive it once with the real pointer (`left_click`, `left_click_drag`)
+including a few pixels of drift, because that is the case that actually breaks.
 
 - **Double-click hit-tests coordinates, not `event.target`.** `dblclick` retargets to the
   common ancestor of its two clicks, which for a mermaid node is the canvas itself, so the

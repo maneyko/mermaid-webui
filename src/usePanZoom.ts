@@ -14,7 +14,9 @@ const BUTTON_ZOOM_STEP = 1.2
 const WHEEL_ZOOM_DIVISOR = 700
 const FIT_PADDING = 48
 // Below this many pixels of pointer travel, a drag counts as a click rather than a pan.
-const CLICK_SLOP = 4
+// Real clicks drift: a few pixels from a mouse, more from a trackpad tap. At 4px an ordinary
+// click nudged the canvas and was then swallowed as a pan, so the node never opened.
+const CLICK_SLOP = 10
 
 const CENTERED: Viewport = { x: 0, y: 0, scale: 1 }
 

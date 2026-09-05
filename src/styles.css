@@ -106,20 +106,27 @@ body {
 
 /* mermaid injects a stylesheet into every SVG it renders, scoped by the render id, so its
    `#mermaid-7 .node polygon` outranks anything we can write here. !important is the override,
-   not laziness. Selection and the arrow tool's connect ring share a treatment because the two
-   can never be on screen at once: the arrow tool cannot select. */
-.diagram g.node.selected rect,
-.diagram g.node.selected circle,
-.diagram g.node.selected ellipse,
-.diagram g.node.selected polygon,
-.diagram g.node.selected path,
+   not laziness.
+   Hover is thinner than selection so that in select mode, where both can be on screen at
+   once, the ring under the cursor reads as different from the one that is actually selected.
+   The selected rule comes second deliberately: equal specificity, so it wins on a node that
+   is both. */
 .diagram g.node.connect-target rect,
 .diagram g.node.connect-target circle,
 .diagram g.node.connect-target ellipse,
 .diagram g.node.connect-target polygon,
 .diagram g.node.connect-target path {
   stroke: var(--select) !important;
-  stroke-width: 2.5px !important;
+  stroke-width: 1.8px !important;
+}
+
+.diagram g.node.selected rect,
+.diagram g.node.selected circle,
+.diagram g.node.selected ellipse,
+.diagram g.node.selected polygon,
+.diagram g.node.selected path {
+  stroke: var(--select) !important;
+  stroke-width: 3px !important;
 }
 
 .canvas.tool-arrow,

@@ -91,7 +91,8 @@ viable at all; everything before it was chrome.
 - [x] **8. Click to edit, and standalone shapes.** In select mode a single click opens the
       rename box on a node or an edge label — dragging is the only other thing a click could
       mean, so there is no reason to make renaming wait for a second one. In a shape mode,
-      clicking blank canvas creates a standalone node of that shape.
+      clicking blank canvas creates a standalone node of that shape. Hovering rings whatever
+      a click would act on, under every tool except the hand.
 
 Not done yet, roughly in the order I would take them:
 

@@ -239,9 +239,9 @@ export default function Canvas({
     markNodes(diagram.current, 'connect-target', hovered)
   }, [hovered])
 
-  // Only the connecting tools ring nodes, so leaving them must clear any ring left behind.
+  // The hand tool acts on the canvas rather than on any node, so it rings nothing.
   useEffect(() => {
-    if (tool !== 'arrow' && tool !== 'shape') setHovered(null)
+    if (tool === 'hand') setHovered(null)
   }, [tool])
 
   useEffect(() => {
@@ -300,9 +300,9 @@ export default function Canvas({
           return
         }
 
-        if (tool === 'arrow' || tool === 'shape') {
-          setHovered(nodeAt(event.clientX, event.clientY)?.id ?? null)
-        }
+        // Every tool that does something to a node under the cursor rings it, so hovering
+        // tells you what a click or a drag would act on.
+        if (tool !== 'hand') setHovered(nodeAt(event.clientX, event.clientY)?.id ?? null)
         panZoom.move(event)
       }}
       onPointerUp={(event) => {
@@ -341,11 +341,16 @@ export default function Canvas({
           return
         }
 
+        // Hit-test by coordinate, never by event target. Panning captures the pointer on
+        // every press, and capture retargets the compatibility mouse events too, so
+        // `event.target` here is this section rather than whatever was clicked.
+        const under = document.elementFromPoint(event.clientX, event.clientY)
+        if (under == null) return
+
         if (tool === 'shape') {
           // Blank canvas is the only place a standalone node can be asked for; a click on a
           // node belongs to the drag-out gesture, which pointerup already handled.
-          const onNode = (event.target as Element).closest('g.node')
-          if (onNode === null) {
+          if (under.closest('g.node') === null) {
             pendingRename.current = onAddStandalone(shape)
             setTool('select')
           }
@@ -356,7 +361,7 @@ export default function Canvas({
 
         // Dragging is the only other thing a click could have meant, so there is no reason to
         // make renaming wait for a second one.
-        const found = editTargetFor(event.target as Element, source, diagram.current)
+        const found = editTargetFor(under, source, diagram.current)
         if (found === null) {
           onSelect(null)
           return
