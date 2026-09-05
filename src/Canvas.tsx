@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import { nodeIdFromElement } from './correlate'
 import { labelOf } from './edit'
+import { usePanZoom } from './usePanZoom'
+import Toolbar, { type Tool } from './Toolbar'
 
 // useMaxWidth would make mermaid size the SVG to its container, which fights a viewport that
 // does its own scaling. Fixed natural dimensions leave zoom entirely to our transform.
@@ -11,33 +13,14 @@ mermaid.initialize({
   flowchart: { useMaxWidth: false },
 })
 
-const MIN_SCALE = 0.1
-const MAX_SCALE = 8
-const BUTTON_ZOOM_STEP = 1.2
-// Chrome sends deltaY of roughly 120 per mouse-wheel notch, so this puts one notch at about
-// 1.19x. Trackpads send many small deltas and come out smooth at the same divisor.
-const WHEEL_ZOOM_DIVISOR = 700
 const GRID_SPACING = 20
-const FIT_PADDING = 48
 // Matches mermaid's default node label size, so the overlay sits at the size of the text
 // it replaces.
 const LABEL_FONT_SIZE = 16
 
-interface Viewport {
-  x: number
-  y: number
-  scale: number
-}
-
-const CENTERED: Viewport = { x: 0, y: 0, scale: 1 }
-
 // mermaid renders into a DOM id it expects to be unused, and a slow render can still be in
 // flight when the next keystroke starts another one.
 let renderCount = 0
-
-function clamp(value: number, low: number, high: number): number {
-  return Math.min(Math.max(value, low), high)
-}
 
 function markSelected(container: HTMLDivElement | null, nodeId: string | null): void {
   if (container === null) return
@@ -46,20 +29,10 @@ function markSelected(container: HTMLDivElement | null, nodeId: string | null): 
   }
 }
 
-// Keeps the content under (pointerX, pointerY) pinned while the scale changes. Both are
-// relative to the frame's centre, because that is the transform origin.
-function zoomAbout(view: Viewport, pointerX: number, pointerY: number, factor: number): Viewport {
-  const scale = clamp(view.scale * factor, MIN_SCALE, MAX_SCALE)
-  const ratio = scale / view.scale
-  return {
-    scale,
-    x: pointerX - (pointerX - view.x) * ratio,
-    y: pointerY - (pointerY - view.y) * ratio,
-  }
+// Shortcuts must not fire while the user is typing in the editor or the rename overlay.
+function isTyping(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('input, textarea, [contenteditable="true"]') !== null
 }
-
-// Below this many pixels of pointer travel, a drag counts as a click rather than a pan.
-const CLICK_SLOP = 4
 
 interface Editing {
   nodeId: string
@@ -79,22 +52,17 @@ interface CanvasProps {
 }
 
 export default function Canvas({ source, selected, onSelect, onRename }: CanvasProps) {
+  const [tool, setTool] = useState<Tool>('select')
   const [editing, setEditing] = useState<Editing | null>(null)
-  const abandoned = useRef(false)
-  const [view, setView] = useState<Viewport>(CENTERED)
-  const [panning, setPanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const abandoned = useRef(false)
   const frame = useRef<HTMLDivElement>(null)
   const diagram = useRef<HTMLDivElement>(null)
-  const drag = useRef<{
-    pointerId: number
-    x: number
-    y: number
-    from: Viewport
-    moved: boolean
-  } | null>(null)
   // A pan ends with a click event we do not want to treat as a selection.
   const panEndedHere = useRef(false)
+
+  const panZoom = usePanZoom(frame)
+  const { view } = panZoom
 
   // Re-rendering replaces the whole SVG, so the selection has to be reapplied afterwards.
   // Read through a ref to keep the render effect keyed on `source` alone.
@@ -128,54 +96,29 @@ export default function Canvas({ source, selected, onSelect, onRename }: CanvasP
     markSelected(diagram.current, selected)
   }, [selected])
 
-  // React's onWheel is passive, so preventDefault there would be ignored and the page would
-  // scroll instead of the diagram zooming.
   useEffect(() => {
-    const element = frame.current
-    if (element === null) return
-
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault()
-      const bounds = element.getBoundingClientRect()
-      setView((current) =>
-        zoomAbout(
-          current,
-          event.clientX - bounds.left - bounds.width / 2,
-          event.clientY - bounds.top - bounds.height / 2,
-          Math.exp(-event.deltaY / WHEEL_ZOOM_DIVISOR),
-        ),
-      )
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTyping(event.target) || event.metaKey || event.ctrlKey || event.altKey) return
+      if (event.key === '1' || event.key === 'v' || event.key === 'Escape') setTool('select')
+      if (event.key === 'h') setTool('hand')
     }
 
-    element.addEventListener('wheel', onWheel, { passive: false })
-    return () => element.removeEventListener('wheel', onWheel)
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  const zoomIn = () => setView((current) => zoomAbout(current, 0, 0, BUTTON_ZOOM_STEP))
-  const zoomOut = () => setView((current) => zoomAbout(current, 0, 0, 1 / BUTTON_ZOOM_STEP))
-  const reset = () => setView(CENTERED)
-
-  const fit = useCallback(() => {
-    const element = frame.current
+  const fit = () => {
     const svg = diagram.current?.querySelector('svg')
-    if (element === null || svg == null) return
+    if (svg == null) return
+    panZoom.fitTo(svg.width.baseVal.value, svg.height.baseVal.value)
+  }
 
-    const width = svg.width.baseVal.value
-    const height = svg.height.baseVal.value
-    if (width === 0 || height === 0) return
-
-    const bounds = element.getBoundingClientRect()
-    const scale = Math.min(
-      (bounds.width - FIT_PADDING * 2) / width,
-      (bounds.height - FIT_PADDING * 2) / height,
-      1,
-    )
-    setView({ x: 0, y: 0, scale: clamp(scale, MIN_SCALE, MAX_SCALE) })
-  }, [])
+  const classes = ['canvas', `tool-${tool}`]
+  if (panZoom.panning) classes.push('panning')
 
   return (
     <section
-      className={panning ? 'canvas panning' : 'canvas'}
+      className={classes.join(' ')}
       ref={frame}
       style={{
         backgroundSize: `${GRID_SPACING * view.scale}px ${GRID_SPACING * view.scale}px`,
@@ -183,35 +126,11 @@ export default function Canvas({ source, selected, onSelect, onRename }: CanvasP
       }}
       onPointerDown={(event) => {
         if (event.button !== 0) return
-        drag.current = {
-          pointerId: event.pointerId,
-          x: event.clientX,
-          y: event.clientY,
-          from: view,
-          moved: false,
-        }
-        event.currentTarget.setPointerCapture(event.pointerId)
+        panZoom.begin(event)
       }}
-      onPointerMove={(event) => {
-        const active = drag.current
-        if (active === null || active.pointerId !== event.pointerId) return
-
-        const dx = event.clientX - active.x
-        const dy = event.clientY - active.y
-        if (!active.moved) {
-          if (Math.abs(dx) < CLICK_SLOP && Math.abs(dy) < CLICK_SLOP) return
-          active.moved = true
-          setPanning(true)
-        }
-
-        setView({ scale: active.from.scale, x: active.from.x + dx, y: active.from.y + dy })
-      }}
+      onPointerMove={panZoom.move}
       onPointerUp={(event) => {
-        const active = drag.current
-        if (active?.pointerId !== event.pointerId) return
-        drag.current = null
-        setPanning(false)
-        panEndedHere.current = active.moved
+        panEndedHere.current = panZoom.end(event)
       }}
       // Selection rides on click rather than pointerup: pointer capture retargets pointer
       // events at this element, but click still reports the node actually under the cursor.
@@ -220,12 +139,14 @@ export default function Canvas({ source, selected, onSelect, onRename }: CanvasP
           panEndedHere.current = false
           return
         }
+        if (tool !== 'select') return
         const node = (event.target as Element).closest('g.node')
         onSelect(node === null ? null : nodeIdFromElement(node))
       }}
       // dblclick retargets to the common ancestor of the two clicks, which for a mermaid node
       // is the canvas itself. Hit-testing the coordinates instead gives the real node.
       onDoubleClick={(event) => {
+        if (tool !== 'select') return
         const node = document.elementFromPoint(event.clientX, event.clientY)?.closest('g.node')
         if (node == null || frame.current === null) return
         const nodeId = nodeIdFromElement(node)
@@ -255,22 +176,15 @@ export default function Canvas({ source, selected, onSelect, onRename }: CanvasP
         <div className="diagram" ref={diagram} />
       </div>
 
-      <div className="toolbar" onPointerDown={(event) => event.stopPropagation()}>
-        <button type="button" aria-label="Zoom out" onClick={zoomOut}>
-          -
-        </button>
-        <span className="zoom">{Math.round(view.scale * 100)}%</span>
-        <button type="button" aria-label="Zoom in" onClick={zoomIn}>
-          +
-        </button>
-        <span className="separator" />
-        <button type="button" onClick={fit}>
-          Fit
-        </button>
-        <button type="button" onClick={reset}>
-          Reset
-        </button>
-      </div>
+      <Toolbar
+        tool={tool}
+        onToolChange={setTool}
+        scale={view.scale}
+        onZoomIn={panZoom.zoomIn}
+        onZoomOut={panZoom.zoomOut}
+        onFit={fit}
+        onReset={panZoom.reset}
+      />
 
       {editing !== null && (
         <input

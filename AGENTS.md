@@ -43,7 +43,9 @@ index.html
 src/main.tsx            React root
 src/App.tsx             owns the source string, nothing else
 src/CodePane.tsx        CodeMirror 6 editor, controlled
-src/Canvas.tsx          mermaid render, viewport, selection, toolbar, error panel
+src/Canvas.tsx          mermaid render, selection, renaming, gesture policy
+src/usePanZoom.ts       the viewport: pan drag, wheel zoom, fit
+src/Toolbar.tsx         the floating islands and the Tool type
 src/correlate.ts        source -> node spans, and rendered SVG id -> node id
 src/correlate.test.ts   bun test
 src/edit.ts             minimal rewrites back into the source
@@ -56,9 +58,11 @@ Flat on purpose. `correlate.ts` (read) and `edit.ts` (write) are the pure half a
 parts with tests, which is deliberate: it is where the bugs will live. Keep new pure logic
 there, free of DOM and React, so it stays testable with `bun test`.
 
-`Canvas.tsx` is around 240 lines and now carries three concerns: rendering, the viewport, and
-selection. This is the point where pulling the viewport out into a `usePanZoom` hook stops
-being premature. Do it when the file next needs to grow, not as a standalone tidy-up.
+## Vocabulary
+
+**Edge** always means a connection between two nodes, as in graph theory. The boundary of a
+shape is its **side**. Getting these confused in a graph editor is genuinely expensive, so
+keep them straight in code, comments, and commit messages.
 
 ## Mermaid facts worth not rediscovering
 
@@ -149,10 +153,10 @@ target for the Langium migration though, so this may change.
 - `fit` caps at 100%. Scaling a three-node flowchart up to fill a wide window looks absurd,
   and "fit" usefully means "make sure I can see all of it".
 - The toolbar stops pointer-down propagation, otherwise every button click also starts a pan.
-- `Canvas.tsx` is around 180 lines and carries two concerns: rendering the diagram and
-  managing the viewport. That is tolerable now. Milestone 4 adds selection to the same file,
-  and that is the point at which pulling the viewport out into `usePanZoom` earns itself.
-  Not before.
+- `usePanZoom` owns the viewport and the pan drag, but not gesture *policy*. It exposes
+  `begin`/`move`/`end` rather than ready-made handlers, because which tool pans and what a
+  click means belongs to `Canvas`. `end` returns whether the pointer actually travelled, so
+  the caller can tell a pan from a click.
 
 ### Selection
 
@@ -177,6 +181,17 @@ Re-rendering replaces the whole SVG, so the selection class is reapplied after e
 Spans are offsets into a specific version of the text, so `App` clears the selection whenever
 the source changes. Any future feature that edits text while keeping a selection has to
 recompute the spans, not carry them across.
+
+### Tools
+
+- A tool is a mode, Excalidraw-style. `select` clicks, double-clicks and pans; `hand` only
+  pans. Both gates live in `Canvas`, checked at the top of `onClick` and `onDoubleClick`.
+- **The floating chrome must stop click and double-click, not just pointer-down.** It
+  originally stopped only pointer-down, so pressing a toolbar button reached the canvas as a
+  click on empty space and silently cleared the node selection.
+- Shortcuts are a `window` keydown listener, so they must ignore events from the editor and
+  the rename overlay. `isTyping` checks for an enclosing `input`, `textarea` or
+  `contenteditable` -- CodeMirror's editable surface is the last of those.
 
 ### Renaming
 

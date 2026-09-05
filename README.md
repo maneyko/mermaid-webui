@@ -77,12 +77,24 @@ Worth reaching early rather than late.
       only the label's own span, so the rest of the line comes back byte-identical, and a
       label containing brackets or quotes is quoted and escaped so it round-trips exactly.
       Enter commits, Escape cancels.
-- [ ] **6. Drag as a structural edit.** Reorder siblings, reparent into a subgraph,
-      reconnect an edge.
+- [x] **6a. Tools.** A tool picker in the floating island: select (`1` / `v`) and hand
+      (`h`), with `Escape` returning to select. Select clicks and renames; hand only pans.
+      The viewport moved out into `usePanZoom`.
+- [ ] **6b. Connect two nodes by dragging.** With the arrow tool, hovering a node rings it;
+      drag from one node to another and a single `A --> B` line is appended. Dropping on
+      empty canvas cancels — an edge needs two endpoints.
+- [ ] **7. The other structural drags.** Reorder siblings by dragging one past another, and
+      reparent a node by dragging it into a subgraph. Both need spans the scanner does not
+      produce yet: whole statements rather than nodes.
 
 Scope for v1 is **flowcharts only**. Other diagram types render read-only. Flowchart is both
 the type people actually want to drag around and the hardest parser case, so solving it first
 de-risks the rest.
+
+One thing the canvas will never offer: choosing which side of a node an arrow attaches to.
+Mermaid has no port syntax, so `A --> B` is the entire vocabulary and dagre decides the
+routing. This is why hovering a node with the arrow tool rings the whole shape rather than
+offering connection points — four points would imply a choice that cannot be expressed.
 
 ## Prior art
 
