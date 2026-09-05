@@ -193,6 +193,20 @@ recompute the spans, not carry them across.
   the rename overlay. `isTyping` checks for an enclosing `input`, `textarea` or
   `contenteditable` -- CodeMirror's editable surface is the last of those.
 
+### Shapes
+
+- `SHAPES` in `edit.ts` is the whole vocabulary: rectangle `[]`, rounded `()`, diamond `{}`,
+  circle `(())`. Adding one means adding a delimiter pair there and an icon in `Toolbar.tsx`.
+- The buttons do two jobs. With a node selected they restyle it in place, preserving the
+  label verbatim (an already-quoted `"a|b"` is carried across, not re-quoted). With nothing
+  selected they arm the shape tool, and dragging out from a node to empty canvas creates a
+  new connected node.
+- **New nodes are created connected, never free-standing.** A disconnected node is its own
+  dagre component and gets parked away from wherever the user gestured, which reads as a bug.
+  Connected, it lands near the release point because its parent anchors it.
+- A doubled delimiter is one shape, not nesting -- see the label rules above. This matters
+  most for circles: get it wrong and renaming `A((x))` silently emits `A(x)`.
+
 ### Connecting
 
 - The arrow tool starts a connect drag only when pointer-down lands on a node; on empty
@@ -241,9 +255,28 @@ expresses the change, so every byte outside it comes back identical.
   - the same `|"yes|no"|` — the CodeMirror tokenizer closed the edge label early and
     mis-coloured every line after it.
 
-  All three are fixed by skipping quoted stretches. Any new emitter or reader needs the same
-  check: **write a value, read it back, write again** — and look at the highlighting, not
-  just the data.
+  All three are fixed by skipping quoted stretches. A fourth had the same shape without
+  quoting: `skipShape` counted `((` as nested parens, so a circle's label included the inner
+  pair and renaming `A((x))` emitted `A(x)`, quietly demoting it to a rounded rectangle.
+
+  Any new emitter or reader needs the same check: **write a value, read it back, write
+  again** — and look at the highlighting, not just the data.
+
+- **Also check that mermaid accepts what we emit.** Passing our own scanner is not enough.
+  `A[""]` survived a round trip and a unit test while being a *parse error in every shape* —
+  it only surfaced when a new node rendered as a broken diagram. An empty label has no
+  representation in mermaid, so `quoteLabel` emits a quoted blank space instead.
+
+  The scanner tests cannot catch this, because mermaid needs a DOM. Check it in the browser
+  against the running app:
+
+  ```js
+  const m = (await import('/node_modules/.vite/deps/mermaid.js')).default
+  await m.parse('flowchart TD\n  A[""]\n')   // throws
+  ```
+
+  Every combination of `SHAPES` against every output `quoteLabel` can produce was verified
+  this way against mermaid 11.17.2. Re-run it whenever either of those two changes.
 - **Renaming a bare node gives it a shape** (`B` becomes `B[Label]`) at the declaration only,
   leaving every other mention of the id alone.
 - **Edge labels are addressed by position, because they have no identity.** A rendered

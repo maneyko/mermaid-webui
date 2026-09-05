@@ -1,8 +1,13 @@
-export type Tool = 'select' | 'hand' | 'arrow'
+import { SHAPES, type Shape } from './edit'
+
+export type Tool = 'select' | 'hand' | 'arrow' | 'shape'
 
 interface ToolbarProps {
   tool: Tool
   onToolChange: (tool: Tool) => void
+  shape: Shape
+  onPickShape: (shape: Shape) => void
+  hasSelection: boolean
   scale: number
   onZoomIn: () => void
   onZoomOut: () => void
@@ -67,9 +72,37 @@ const TOOLS: { tool: Tool; label: string; shortcut: string; icon: () => React.Re
   { tool: 'arrow', label: 'Arrow', shortcut: '2', icon: ArrowIcon },
 ]
 
+function shapeIcon(children: React.ReactNode) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  )
+}
+
+const SHAPE_ICONS: Record<string, React.ReactElement> = {
+  Rectangle: shapeIcon(<rect x="3.5" y="6.5" width="17" height="11" />),
+  Rounded: shapeIcon(<rect x="3.5" y="6.5" width="17" height="11" rx="5.5" />),
+  Diamond: shapeIcon(<path d="M12 3.5 L20.5 12 L12 20.5 L3.5 12 Z" />),
+  Circle: shapeIcon(<circle cx="12" cy="12" r="8.5" />),
+}
+
+const SHAPE_SHORTCUTS = ['3', '4', '5', '6']
+
 export default function Toolbar({
   tool,
   onToolChange,
+  shape,
+  onPickShape,
+  hasSelection,
   scale,
   onZoomIn,
   onZoomOut,
@@ -99,6 +132,27 @@ export default function Toolbar({
           >
             <Icon />
             <span className="shortcut">{shortcut}</span>
+          </button>
+        ))}
+
+        <span className="separator" />
+
+        {SHAPES.map((each, position) => (
+          <button
+            key={each.name}
+            type="button"
+            className={tool === 'shape' && shape.name === each.name ? 'tool active' : 'tool'}
+            aria-label={hasSelection ? `Make selection a ${each.name}` : `${each.name} tool`}
+            aria-pressed={tool === 'shape' && shape.name === each.name}
+            title={
+              hasSelection
+                ? `Change the selected node to a ${each.name.toLowerCase()}`
+                : `${each.name} (${SHAPE_SHORTCUTS[position]}) -- drag from a node to add one`
+            }
+            onClick={() => onPickShape(each)}
+          >
+            {SHAPE_ICONS[each.name]}
+            <span className="shortcut">{SHAPE_SHORTCUTS[position]}</span>
           </button>
         ))}
       </div>

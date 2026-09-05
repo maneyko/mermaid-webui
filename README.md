@@ -84,7 +84,13 @@ Worth reaching early rather than late.
       rings it; drag from one node to another and a single `A --> B` line is appended,
       indented to match. A dashed rubber band follows the cursor. Dropping on empty canvas —
       or back on the node you started from — cancels.
-- [ ] **7. The other structural drags.** Reorder siblings by dragging one past another, and
+- [x] **7. Shapes.** Rectangle, rounded, diamond and circle (`3`–`6`). With a node selected
+      the buttons change its shape, preserving the label. With nothing selected they arm a
+      tool: drag out from an existing node to empty canvas and a new connected node of that
+      shape appears, with the rename box already open on it. It is created *connected* so
+      dagre places it near where you released — a disconnected node would be parked
+      somewhere else entirely, since position is never ours to choose.
+- [ ] **8. The other structural drags.** Reorder siblings by dragging one past another, and
       reparent a node by dragging it into a subgraph. Both need spans the scanner does not
       produce yet: whole statements rather than nodes.
 

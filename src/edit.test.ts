@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test'
 import {
+  addConnectedNode,
   connectNodes,
+  nextNodeId,
+  setNodeShape,
+  SHAPES,
   edgeLabelCount,
   edgeLabelOf,
   labelOf,
@@ -45,9 +49,16 @@ test('escapes embedded quotes rather than emitting broken syntax', () => {
 })
 
 test('quoting round-trips through unquoting', () => {
-  for (const label of ['plain', 'Buy [things]', 'a|b', 'say "hi"', ' padded ', '']) {
+  for (const label of ['plain', 'Buy [things]', 'a|b', 'say "hi"', ' padded ']) {
     expect(unquoteLabel(quoteLabel(label))).toBe(label)
   }
+})
+
+// Verified against mermaid 11.17.2: `A[""]`, `A("")`, `A{""}` and `A((""))` are all parse
+// errors, while a quoted blank space parses in every shape.
+test('a cleared label becomes a blank space, because mermaid has no empty label', () => {
+  expect(quoteLabel('')).toBe('" "')
+  expect(unquoteLabel(quoteLabel(''))).toBe(' ')
 })
 
 test('leaves an ordinary label unquoted', () => {
@@ -89,6 +100,60 @@ test('an appended connection is readable by the scanner', () => {
   const next = connectNodes(SOURCE, 'B', 'C')
   expect(labelOf(next, 'B')).toBe('Go shopping')
   expect(labelOf(next, 'C')).toBe('Let me think')
+})
+
+const shape = (name: string) => {
+  const found = SHAPES.find((s) => s.name === name)
+  if (found === undefined) throw new Error(`no shape ${name}`)
+  return found
+}
+
+test('a new node id avoids every id already in use', () => {
+  expect(nextNodeId(SOURCE)).toBe('D')
+  expect(nextNodeId('flowchart TD\n  A --> B\n')).toBe('C')
+})
+
+test('adding a connected node appends one line and reports the new id', () => {
+  const added = addConnectedNode(SOURCE, 'C', shape('Diamond'))
+  expect(added.nodeId).toBe('D')
+  expect(added.source).toBe(`${SOURCE}  C --> D{" "}\n`)
+})
+
+test('a newly added node is readable back by the scanner', () => {
+  const added = addConnectedNode(SOURCE, 'C', shape('Circle'))
+  expect(added.source).toContain('C --> D((" "))')
+  expect(labelOf(added.source, 'D')).toBe(' ')
+  // The shape must survive being named, which is what the doubled-delimiter fix is for.
+  expect(renameLabel(added.source, 'D', 'Wrap it')).toContain('D((Wrap it))')
+})
+
+test('changing a shape keeps the label and the rest of the line', () => {
+  expect(setNodeShape(SOURCE, 'A', shape('Diamond'))).toBe(`flowchart TD
+  A{Christmas} -->|Get money| B(Go shopping)
+  B --> C{Let me think}
+`)
+})
+
+test('changing a shape carries an already-quoted label across untouched', () => {
+  const source = 'flowchart TD\n  A["a|b"] --> B\n'
+  const next = setNodeShape(source, 'A', shape('Rounded'))
+  expect(next).toBe('flowchart TD\n  A("a|b") --> B\n')
+  expect(labelOf(next, 'A')).toBe('a|b')
+})
+
+test('giving a bare node a shape uses its id as the label it already displayed', () => {
+  expect(setNodeShape('flowchart TD\n  A --> B\n', 'B', shape('Diamond'))).toBe(
+    'flowchart TD\n  A --> B{B}\n',
+  )
+})
+
+test('changing shape is reversible', () => {
+  const diamond = setNodeShape(SOURCE, 'A', shape('Diamond'))
+  expect(setNodeShape(diamond, 'A', shape('Rectangle'))).toBe(SOURCE)
+})
+
+test('an unknown node keeps its shape request to itself', () => {
+  expect(setNodeShape(SOURCE, 'ZZZ', shape('Circle'))).toBe(SOURCE)
 })
 
 const LABELLED = `flowchart TD
@@ -145,7 +210,7 @@ test('an unknown node leaves the source untouched', () => {
 })
 
 test('an emptied label stays valid mermaid', () => {
-  expect(renameLabel(SOURCE, 'A', '')).toContain('A[""]')
+  expect(renameLabel(SOURCE, 'A', '')).toContain('A[" "]')
 })
 
 test('a rename survives a second rename', () => {

@@ -109,7 +109,17 @@ function collectOccurrences(source: string): NodeSpan[] {
     if (opener !== undefined && closer !== undefined) {
       const shapeEnd = skipShape(source, idEnd, opener, closer)
       if (shapeEnd !== null) {
-        found.push({ id, from: index, to: shapeEnd, labelFrom: idEnd + 1, labelTo: shapeEnd - 1 })
+        // A doubled delimiter is one shape, not nesting: the label of `A((Circle))` is
+        // `Circle`, and treating the inner pair as part of it would make a rename rewrite
+        // `A((x))` as `A(x)` and quietly turn the circle into a rounded rectangle.
+        const width = source[idEnd + 1] === opener ? 2 : 1
+        found.push({
+          id,
+          from: index,
+          to: shapeEnd,
+          labelFrom: idEnd + width,
+          labelTo: shapeEnd - width,
+        })
         index = shapeEnd
         continue
       }

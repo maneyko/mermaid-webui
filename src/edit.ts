@@ -7,9 +7,15 @@ import { findEdgeLabels, findNodes } from './correlate'
 // Anything that would terminate a shape early, or that mermaid reads as syntax inside one.
 const NEEDS_QUOTING = /["[\]{}()|<>]/
 
+// Mermaid rejects an empty label in every shape -- `A[""]`, `A(("" ))` and friends are all
+// parse errors -- so a cleared label is stored as a single blank space, which parses
+// everywhere and renders as an empty node.
+const BLANK_LABEL = ' '
+
 export function quoteLabel(label: string): string {
-  if (label !== '' && label === label.trim() && !NEEDS_QUOTING.test(label)) return label
-  return `"${label.replaceAll('"', '#quot;')}"`
+  const text = label === '' ? BLANK_LABEL : label
+  if (text === text.trim() && !NEEDS_QUOTING.test(text)) return text
+  return `"${text.replaceAll('"', '#quot;')}"`
 }
 
 export function unquoteLabel(label: string): string {
@@ -56,6 +62,58 @@ function trailingIndent(source: string): string {
     return /^\s*/.exec(line)?.[0] ?? DEFAULT_INDENT
   }
   return DEFAULT_INDENT
+}
+
+export interface Shape {
+  name: string
+  open: string
+  close: string
+}
+
+export const SHAPES: Shape[] = [
+  { name: 'Rectangle', open: '[', close: ']' },
+  { name: 'Rounded', open: '(', close: ')' },
+  { name: 'Diamond', open: '{', close: '}' },
+  { name: 'Circle', open: '((', close: '))' },
+]
+
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+// Single letters match how flowcharts are written by hand. findNodes over-reports slightly
+// (subgraph names, stray identifiers), which is the safe direction for avoiding a collision.
+export function nextNodeId(source: string): string {
+  const taken = findNodes(source)
+  for (const letter of LETTERS) {
+    if (!taken.has(letter)) return letter
+  }
+  for (let suffix = 1; ; suffix += 1) {
+    const id = `N${suffix}`
+    if (!taken.has(id)) return id
+  }
+}
+
+export function addConnectedNode(source: string, fromId: string, shape: Shape) {
+  const nodeId = nextNodeId(source)
+  const body = source.endsWith('\n') || source === '' ? source : `${source}\n`
+  const empty = quoteLabel('')
+  return {
+    source: `${body}${trailingIndent(source)}${fromId} --> ${nodeId}${shape.open}${empty}${shape.close}\n`,
+    nodeId,
+  }
+}
+
+// The label is carried across verbatim rather than re-quoted, so an already-quoted one such as
+// `"a|b"` survives a shape change untouched.
+export function setNodeShape(source: string, nodeId: string, shape: Shape): string {
+  const node = findNodes(source).get(nodeId)
+  if (node === undefined) return source
+
+  const label =
+    node.labelFrom === null || node.labelTo === null
+      ? quoteLabel(nodeId)
+      : source.slice(node.labelFrom, node.labelTo)
+
+  return `${source.slice(0, node.from)}${nodeId}${shape.open}${label}${shape.close}${source.slice(node.to)}`
 }
 
 export function connectNodes(source: string, fromId: string, toId: string): string {

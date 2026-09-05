@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import { nodeIdFromElement } from './correlate'
-import { edgeLabelCount, edgeLabelOf, labelOf } from './edit'
+import { edgeLabelCount, edgeLabelOf, labelOf, SHAPES, type Shape } from './edit'
 import { usePanZoom } from './usePanZoom'
 import Toolbar, { type Tool } from './Toolbar'
 
@@ -109,6 +109,8 @@ interface CanvasProps {
   onRename: (nodeId: string, label: string) => void
   onRenameEdge: (index: number, label: string) => void
   onConnect: (fromId: string, toId: string) => void
+  onSetShape: (nodeId: string, shape: Shape) => void
+  onAddNode: (fromId: string, shape: Shape) => string
 }
 
 export default function Canvas({
@@ -118,8 +120,14 @@ export default function Canvas({
   onRename,
   onRenameEdge,
   onConnect,
+  onSetShape,
+  onAddNode,
 }: CanvasProps) {
   const [tool, setTool] = useState<Tool>('select')
+  const [shape, setShape] = useState<Shape>(SHAPES[0] as Shape)
+  // A node added by dragging out does not exist in the DOM until the next render, so the
+  // rename it should open with is deferred until the SVG that contains it arrives.
+  const pendingRename = useRef<string | null>(null)
   const [editing, setEditing] = useState<Editing | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
   const [connecting, setConnecting] = useState<Connecting | null>(null)
@@ -160,6 +168,34 @@ export default function Canvas({
     return toFrame(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)
   }
 
+  const openEditorOn = (element: Element, target: EditTarget, label: string) => {
+    if (frame.current === null) return
+    const bounds = element.getBoundingClientRect()
+    const frameBounds = frame.current.getBoundingClientRect()
+    setEditing({
+      target,
+      value: label,
+      original: label,
+      left: bounds.left - frameBounds.left,
+      top: bounds.top - frameBounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    })
+  }
+
+  // With a node selected the shape buttons restyle it; with nothing selected they arm the
+  // shape tool, and a node of that shape is created by dragging out from an existing one.
+  const pickShape = (picked: Shape) => {
+    if (selected !== null) {
+      onSetShape(selected, picked)
+      return
+    }
+    setShape(picked)
+    setTool('shape')
+  }
+  const latestPickShape = useRef(pickShape)
+  latestPickShape.current = pickShape
+
   useEffect(() => {
     let stale = false
 
@@ -171,6 +207,15 @@ export default function Canvas({
           diagram.current.innerHTML = svg
           markNodes(diagram.current, 'selected', latestSelected.current)
           markNodes(diagram.current, 'connect-target', latestHovered.current)
+
+          const pending = pendingRename.current
+          if (pending !== null) {
+            pendingRename.current = null
+            const added = [...diagram.current.querySelectorAll('g.node')].find(
+              (node) => nodeIdFromElement(node) === pending,
+            )
+            if (added !== undefined) openEditorOn(added, { kind: 'node', nodeId: pending }, '')
+          }
         }
         setError(null)
       } catch (cause) {
@@ -192,9 +237,9 @@ export default function Canvas({
     markNodes(diagram.current, 'connect-target', hovered)
   }, [hovered])
 
-  // Only the arrow tool rings nodes, so leaving it must clear any ring left behind.
+  // Only the connecting tools ring nodes, so leaving them must clear any ring left behind.
   useEffect(() => {
-    if (tool !== 'arrow') setHovered(null)
+    if (tool !== 'arrow' && tool !== 'shape') setHovered(null)
   }, [tool])
 
   useEffect(() => {
@@ -203,6 +248,10 @@ export default function Canvas({
       if (event.key === '1' || event.key === 'v' || event.key === 'Escape') setTool('select')
       if (event.key === 'h') setTool('hand')
       if (event.key === '2' || event.key === 'a') setTool('arrow')
+
+      const shapeIndex = ['3', '4', '5', '6'].indexOf(event.key)
+      const picked = shapeIndex === -1 ? undefined : SHAPES[shapeIndex]
+      if (picked !== undefined) latestPickShape.current(picked)
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -229,7 +278,7 @@ export default function Canvas({
       onPointerDown={(event) => {
         if (event.button !== 0) return
 
-        if (tool === 'arrow') {
+        if (tool === 'arrow' || tool === 'shape') {
           const hit = nodeAt(event.clientX, event.clientY)
           if (hit !== null) {
             event.currentTarget.setPointerCapture(event.pointerId)
@@ -249,7 +298,9 @@ export default function Canvas({
           return
         }
 
-        if (tool === 'arrow') setHovered(nodeAt(event.clientX, event.clientY)?.id ?? null)
+        if (tool === 'arrow' || tool === 'shape') {
+          setHovered(nodeAt(event.clientX, event.clientY)?.id ?? null)
+        }
         panZoom.move(event)
       }}
       onPointerUp={(event) => {
@@ -257,13 +308,24 @@ export default function Canvas({
           const hit = nodeAt(event.clientX, event.clientY)
           setConnecting(null)
           setHovered(null)
+          panEndedHere.current = true
+
+          if (tool === 'shape') {
+            // Empty space is where a new node goes; releasing on a node is the arrow tool's
+            // gesture, not this one.
+            if (hit === null) {
+              pendingRename.current = onAddNode(connecting.fromId, shape)
+              setTool('select')
+            }
+            return
+          }
+
           // Dropping on empty space, or back on the start, cancels. Requiring two different
           // nodes means a stray click cannot silently add a self-loop.
           if (hit !== null && hit.id !== connecting.fromId) {
             onConnect(connecting.fromId, hit.id)
             setTool('select')
           }
-          panEndedHere.current = true
           return
         }
 
@@ -327,6 +389,9 @@ export default function Canvas({
       <Toolbar
         tool={tool}
         onToolChange={setTool}
+        shape={shape}
+        onPickShape={pickShape}
+        hasSelection={selected !== null}
         scale={view.scale}
         onZoomIn={panZoom.zoomIn}
         onZoomOut={panZoom.zoomOut}

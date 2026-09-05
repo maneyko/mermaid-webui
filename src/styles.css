@@ -123,7 +123,9 @@ body {
 }
 
 .canvas.tool-arrow,
-.canvas.tool-arrow .diagram g.node {
+.canvas.tool-arrow .diagram g.node,
+.canvas.tool-shape,
+.canvas.tool-shape .diagram g.node {
   cursor: crosshair;
 }
 

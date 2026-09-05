@@ -2,7 +2,7 @@ import { useState } from 'react'
 import CodePane, { type Range } from './CodePane'
 import Canvas from './Canvas'
 import { findNodes } from './correlate'
-import { connectNodes, renameEdgeLabel, renameLabel } from './edit'
+import { addConnectedNode, connectNodes, renameEdgeLabel, renameLabel, setNodeShape } from './edit'
 
 const INITIAL_SOURCE = `flowchart TD
   A[Christmas] -->|Get money| B(Go shopping)
@@ -59,6 +59,18 @@ export default function App() {
           setSource(connectNodes(source, fromId, toId))
           setSelected(null)
           setReveal(null)
+        }}
+        onSetShape={(nodeId, shape) => {
+          setSource(setNodeShape(source, nodeId, shape))
+          setSelected(null)
+          setReveal(null)
+        }}
+        onAddNode={(fromId, shape) => {
+          const added = addConnectedNode(source, fromId, shape)
+          setSource(added.source)
+          setSelected(null)
+          setReveal(null)
+          return added.nodeId
         }}
       />
     </main>

@@ -33,11 +33,19 @@ test('keeps a bare node when it never carries a label', () => {
   expect(labelOf(source, 'B')).toBeNull()
 })
 
-test('handles nested shape delimiters', () => {
+// A doubled delimiter is one shape, not a nested pair, so the label excludes both halves.
+// Renaming would otherwise rewrite `B((Circle))` as `B(Wrapped)` and lose the shape.
+test('handles doubled shape delimiters', () => {
   const source = 'flowchart TD\n  A[[Subroutine]] --> B((Circle))\n'
   expect(spanOf(source, 'A')).toBe('A[[Subroutine]]')
-  expect(labelOf(source, 'A')).toBe('[Subroutine]')
+  expect(labelOf(source, 'A')).toBe('Subroutine')
   expect(spanOf(source, 'B')).toBe('B((Circle))')
+  expect(labelOf(source, 'B')).toBe('Circle')
+})
+
+test('a balanced pair inside a single delimiter is still part of the label', () => {
+  const source = 'flowchart TD\n  A[a (b) c] --> B\n'
+  expect(labelOf(source, 'A')).toBe('a (b) c')
 })
 
 test('does not mistake edge labels for nodes', () => {
