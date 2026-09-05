@@ -112,6 +112,7 @@ interface CanvasProps {
   onSetShape: (nodeId: string, shape: Shape) => void
   onAddNode: (fromId: string, shape: Shape) => string
   onAddStandalone: (shape: Shape) => string
+  onDelete: (nodeId: string) => void
 }
 
 export default function Canvas({
@@ -124,6 +125,7 @@ export default function Canvas({
   onSetShape,
   onAddNode,
   onAddStandalone,
+  onDelete,
 }: CanvasProps) {
   const [tool, setTool] = useState<Tool>('select')
   const [shape, setShape] = useState<Shape>(SHAPES[0] as Shape)
@@ -197,6 +199,8 @@ export default function Canvas({
   }
   const latestPickShape = useRef(pickShape)
   latestPickShape.current = pickShape
+  const latestDelete = useRef(onDelete)
+  latestDelete.current = onDelete
 
   useEffect(() => {
     let stale = false
@@ -250,6 +254,12 @@ export default function Canvas({
       if (event.key === '1' || event.key === 'v' || event.key === 'Escape') setTool('select')
       if (event.key === 'h') setTool('hand')
       if (event.key === '2' || event.key === 'a') setTool('arrow')
+
+      const selectedNode = latestSelected.current
+      if ((event.key === 'Backspace' || event.key === 'Delete') && selectedNode !== null) {
+        event.preventDefault()
+        latestDelete.current(selectedNode)
+      }
 
       const shapeIndex = ['3', '4', '5', '6'].indexOf(event.key)
       const picked = shapeIndex === -1 ? undefined : SHAPES[shapeIndex]
@@ -397,6 +407,9 @@ export default function Canvas({
         shape={shape}
         onPickShape={pickShape}
         hasSelection={selected !== null}
+        onDelete={() => {
+          if (selected !== null) onDelete(selected)
+        }}
         scale={view.scale}
         onZoomIn={panZoom.zoomIn}
         onZoomOut={panZoom.zoomOut}

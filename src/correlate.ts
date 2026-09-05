@@ -47,6 +47,22 @@ function skipDelimited(source: string, index: number, delimiter: string): number
   return closing === -1 ? source.length : closing + 1
 }
 
+// The closing `|` of an edge label, skipping quoted stretches so `|"yes|no"|` -- which we
+// emit ourselves for a label containing a pipe -- does not terminate at the inner one.
+// Returns -1 when the label does not close on its line, which makes the `|` ordinary text.
+function closingPipe(source: string, index: number): number {
+  for (let cursor = index + 1; cursor < source.length; cursor += 1) {
+    const character = source[cursor]
+    if (character === '\n') return -1
+    if (character === '"') {
+      cursor = skipDelimited(source, cursor, '"') - 1
+      continue
+    }
+    if (character === '|') return cursor
+  }
+  return -1
+}
+
 // Node labels nest (`[[Subroutine]]`, `((Circle))`), so match by depth. Delimiters inside a
 // quoted label are text and must not count, or `A["Buy [things"]` -- which mermaid accepts
 // and which we ourselves emit for a label containing a bracket -- never closes. Returns the
@@ -67,17 +83,62 @@ function skipShape(source: string, index: number, open: string, close: string): 
   return null
 }
 
-function collectOccurrences(source: string): NodeSpan[] {
-  const found: NodeSpan[] = []
+// A statement is one mermaid instruction: the text between newlines or semicolons, trimmed.
+// `keyword` is the leading keyword for the statements that have one (`style`, `subgraph`,
+// `flowchart`), and null for the graph statements that declare and connect nodes. `scope` is
+// the index of the enclosing `subgraph` statement, or -1 at the top level -- a node belongs
+// to whichever subgraph mentions it, so scope is the difference between two mentions of the
+// same id being interchangeable and not.
+export interface Statement {
+  from: number
+  to: number
+  keyword: string | null
+  scope: number
+  nodes: NodeSpan[]
+}
+
+function assignScopes(statements: Statement[]): void {
+  const open: number[] = []
+  statements.forEach((statement, index) => {
+    if (statement.keyword === 'end') open.pop()
+    statement.scope = open.at(-1) ?? -1
+    if (statement.keyword === 'subgraph') open.push(index)
+  })
+}
+
+// Splitting on `;` has to skip quotes and shapes for the same reason locating nodes does --
+// a semicolon inside a label is text -- so the split and the node walk are one pass.
+export function findStatements(source: string): Statement[] {
+  const statements: Statement[] = []
   let index = 0
+  let start = 0
+  let keyword: string | null = null
+  let nodes: NodeSpan[] = []
+
+  const finish = (stop: number) => {
+    let from = start
+    let to = stop
+    while (from < to && /\s/.test(source[from] as string)) from += 1
+    while (to > from && /\s/.test(source[to - 1] as string)) to -= 1
+    if (to > from) statements.push({ from, to, keyword, scope: -1, nodes })
+    start = stop + 1
+    keyword = null
+    nodes = []
+  }
 
   while (index < source.length) {
+    const character = source[index]
+
+    if (character === '\n' || character === ';') {
+      finish(index)
+      index += 1
+      continue
+    }
+
     if (source.startsWith('%%', index)) {
       index = skipToNewline(source, index)
       continue
     }
-
-    const character = source[index]
 
     if (character === '"') {
       index = skipDelimited(source, index, '"')
@@ -86,7 +147,8 @@ function collectOccurrences(source: string): NodeSpan[] {
 
     // Edge labels are text, not node references.
     if (character === '|') {
-      index = skipDelimited(source, index, '|')
+      const closing = closingPipe(source, index)
+      index = closing === -1 ? index + 1 : closing + 1
       continue
     }
 
@@ -100,6 +162,7 @@ function collectOccurrences(source: string): NodeSpan[] {
     const idEnd = index + id.length
 
     if (KEYWORDS.has(id)) {
+      if (keyword === null && nodes.length === 0) keyword = id
       index = idEnd
       continue
     }
@@ -113,7 +176,7 @@ function collectOccurrences(source: string): NodeSpan[] {
         // `Circle`, and treating the inner pair as part of it would make a rename rewrite
         // `A((x))` as `A(x)` and quietly turn the circle into a rounded rectangle.
         const width = source[idEnd + 1] === opener ? 2 : 1
-        found.push({
+        nodes.push({
           id,
           from: index,
           to: shapeEnd,
@@ -125,21 +188,25 @@ function collectOccurrences(source: string): NodeSpan[] {
       }
     }
 
-    found.push({ id, from: index, to: idEnd, labelFrom: null, labelTo: null })
+    nodes.push({ id, from: index, to: idEnd, labelFrom: null, labelTo: null })
     index = idEnd
   }
 
-  return found
+  finish(source.length)
+  assignScopes(statements)
+  return statements
 }
 
 // A node can appear many times; the declaration is the occurrence that carries the label.
 export function findNodes(source: string): Map<string, NodeSpan> {
   const declarations = new Map<string, NodeSpan>()
 
-  for (const occurrence of collectOccurrences(source)) {
-    const existing = declarations.get(occurrence.id)
-    if (existing === undefined || (existing.labelFrom === null && occurrence.labelFrom !== null)) {
-      declarations.set(occurrence.id, occurrence)
+  for (const statement of findStatements(source)) {
+    for (const occurrence of statement.nodes) {
+      const existing = declarations.get(occurrence.id)
+      if (existing === undefined || (existing.labelFrom === null && occurrence.labelFrom !== null)) {
+        declarations.set(occurrence.id, occurrence)
+      }
     }
   }
 
@@ -149,22 +216,6 @@ export function findNodes(source: string): Map<string, NodeSpan> {
 export interface Span {
   from: number
   to: number
-}
-
-// The closing `|` of an edge label, skipping quoted stretches so `|"yes|no"|` -- which we
-// emit ourselves for a label containing a pipe -- does not terminate at the inner one.
-// Returns -1 when the label does not close on its line, which makes the `|` ordinary text.
-function closingPipe(source: string, index: number): number {
-  for (let cursor = index + 1; cursor < source.length; cursor += 1) {
-    const character = source[cursor]
-    if (character === '\n') return -1
-    if (character === '"') {
-      cursor = skipDelimited(source, cursor, '"') - 1
-      continue
-    }
-    if (character === '|') return cursor
-  }
-  return -1
 }
 
 // The text inside each `|...|` edge label, in declaration order. Node shapes and quoted

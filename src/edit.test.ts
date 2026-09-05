@@ -3,6 +3,7 @@ import {
   addConnectedNode,
   addStandaloneNode,
   connectNodes,
+  deleteNode,
   nextNodeId,
   setNodeShape,
   SHAPES,
@@ -240,4 +241,105 @@ test('a label with an unbalanced delimiter round-trips', () => {
     expect(labelOf(once, 'A')).toBe(awkward)
     expect(renameLabel(once, 'A', 'Plain')).toContain('A[Plain]')
   }
+})
+
+const HUB = `flowchart TD
+  A[Christmas] -->|Get money| B(Go shopping)
+  B --> C{Let me think}
+  C -->|One| D[Laptop]
+  C -->|Two| E[iPhone]
+`
+
+test('deleting a node takes its edges and leaves every other node standing', () => {
+  expect(deleteNode(HUB, 'C')).toBe(`flowchart TD
+  A[Christmas] -->|Get money| B(Go shopping)
+  D[Laptop]
+  E[iPhone]
+`)
+})
+
+test('a node that still has a declaration elsewhere is not re-emitted', () => {
+  // B is declared on the line that survives, so removing `B --> C` must not add a second B.
+  expect(deleteNode(HUB, 'C')).not.toContain('\n  B\n')
+})
+
+test('a rescued node keeps its shape and label', () => {
+  const next = deleteNode(HUB, 'C')
+  expect(labelOf(next, 'D')).toBe('Laptop')
+  expect(setNodeShape(next, 'D', shape('Circle'))).toContain('D((Laptop))')
+})
+
+test('a bare node comes back bare rather than gaining a shape', () => {
+  expect(deleteNode('flowchart TD\n  A --> B\n', 'A')).toBe('flowchart TD\n  B\n')
+})
+
+test('deleting a standalone node removes its line entirely', () => {
+  expect(deleteNode('flowchart TD\n  A --> B\n  C[Lonely]\n', 'C')).toBe(
+    'flowchart TD\n  A --> B\n',
+  )
+})
+
+test('a node orphaned by several statements is rescued exactly once', () => {
+  const source = 'flowchart TD\n  A --> B\n  A --> B\n'
+  expect(deleteNode(source, 'A')).toBe('flowchart TD\n  B\n')
+})
+
+test('a rescued node stays inside its subgraph and keeps its indentation', () => {
+  const source = 'flowchart TD\n  subgraph Box\n    A --> B\n  end\n  B --> C\n'
+  expect(deleteNode(source, 'A')).toBe('flowchart TD\n  subgraph Box\n    B\n  end\n  B --> C\n')
+})
+
+// `style X ...` compiles to an addVertex, so a style line outliving its node would bring the
+// node back as an unlabelled box instead of failing loudly.
+test('deleting a node takes its style, class and click lines with it', () => {
+  const source =
+    'flowchart TD\n  A --> B\n  style B fill:#f9f\n  class B big\n  click B href "x"\n'
+  expect(deleteNode(source, 'B')).toBe('flowchart TD\n  A\n')
+})
+
+test('another node keeps its own style line', () => {
+  const source = 'flowchart TD\n  A --> B\n  style A fill:#f9f\n'
+  expect(deleteNode(source, 'B')).toBe('flowchart TD\n  A\n  style A fill:#f9f\n')
+})
+
+test('classDef and the header are left alone', () => {
+  const source = 'flowchart TD\n  classDef big fill:#f9f\n  A --> B\n'
+  expect(deleteNode(source, 'A')).toBe('flowchart TD\n  classDef big fill:#f9f\n  B\n')
+})
+
+test('deleting an unknown node leaves the source untouched', () => {
+  expect(deleteNode(HUB, 'ZZZ')).toBe(HUB)
+})
+
+test('deleting the last node leaves a header that still parses', () => {
+  expect(deleteNode('flowchart TD\n  A[Only]\n', 'A')).toBe('flowchart TD\n')
+})
+
+test('a semicolon-separated statement is deleted without taking its neighbour', () => {
+  expect(deleteNode('flowchart TD\n  A --> B; C --> D\n', 'D')).toBe(
+    'flowchart TD\n  A --> B; C\n',
+  )
+  expect(deleteNode('flowchart TD\n  A --> B; C --> D\n', 'A')).toBe(
+    'flowchart TD\n  B; C --> D\n',
+  )
+})
+
+test('an edge label is not mistaken for a node when deleting', () => {
+  const source = 'flowchart TD\n  A -->|Get money| B\n'
+  expect(deleteNode(source, 'Get')).toBe(source)
+  expect(deleteNode(source, 'A')).toBe('flowchart TD\n  B\n')
+})
+
+test('a comment naming the node is left alone', () => {
+  const source = 'flowchart TD\n  %% A --> B\n  A --> B\n'
+  expect(deleteNode(source, 'A')).toBe('flowchart TD\n  %% A --> B\n  B\n')
+})
+
+test('what delete writes is readable back by the scanner', () => {
+  const next = deleteNode(HUB, 'C')
+  expect(nextNodeId(next)).toBe('C')
+  expect(deleteNode(next, 'D')).toBe(`flowchart TD
+  A[Christmas] -->|Get money| B(Go shopping)
+  E[iPhone]
+`)
 })

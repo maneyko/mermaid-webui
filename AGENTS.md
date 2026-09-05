@@ -89,6 +89,18 @@ scans the source instead and returns a span per node id, preferring the occurren
 carries a label. It is a scanner, not a parser — it locates node declarations and nothing
 else. Do not grow it into a parser without deciding that is what you want.
 
+`findStatements` is the same single walk one level up: it splits the source on newlines and
+semicolons — skipping quotes and shapes, so a `;` inside a label stays text — and hands back
+each statement with its span, the node occurrences inside it, its leading keyword if it has
+one, and its `scope`. `findNodes` is derived from it. Two things about the extra fields:
+
+- **`keyword` is how a graph statement is told from a directive.** `A --> B` reports null;
+  `style A fill:#f9f` reports `style`. Without it, `fill` and `#f9f` are just more
+  identifiers, and an edit that rewrites statements will happily invent a node called `fill`.
+- **`scope` is the index of the enclosing `subgraph` statement, or -1.** A node belongs to
+  whichever subgraph mentions it, so two mentions of the same id are only interchangeable
+  within one scope. Ignoring this silently moves nodes out of their box — see Deleting.
+
 Things the scanner gets right, all covered by `src/correlate.test.ts`:
 
 - `A-->B` ends the id at `A`. A hyphen only continues an id when a word character follows,
@@ -191,7 +203,8 @@ recompute the spans, not carry them across.
   click on empty space and silently cleared the node selection.
 - Shortcuts are a `window` keydown listener, so they must ignore events from the editor and
   the rename overlay. `isTyping` checks for an enclosing `input`, `textarea` or
-  `contenteditable` -- CodeMirror's editable surface is the last of those.
+  `contenteditable` -- CodeMirror's editable surface is the last of those. That guard is
+  correct and is also why the Delete shortcut needs a button beside it; see Deleting.
 
 ### Shapes
 
@@ -243,6 +256,36 @@ recompute the spans, not carry them across.
   then swallowed, so clicking a node appeared to do nothing at all. Do not tighten it without
   clicking around with a real mouse afterwards.
 
+### Deleting
+
+`deleteNode` removes every statement naming the node and nothing else, which is the standard
+graph-editor rule but not the standard *text* rule, because mermaid declares most nodes
+inside an edge statement. Four things it turns on:
+
+- **A neighbour whose only declaration was on a removed line is re-emitted in its place**,
+  from `findNodes`, so it keeps its shape and label. In place rather than appended, because
+  appending would move it out of its subgraph and to the bottom of the file.
+- **Survival is keyed by `(scope, id)`, not by id.** This was found by a failing test, not by
+  reasoning: deleting `A` from `subgraph Box / A --> B / end` with a later `B --> C` outside
+  left the box empty and B outside it. B still existed, so a global check said "survives" —
+  but its only mention *inside the box* had just been deleted, which is what membership is.
+- **`style X` compiles to an `addVertex`.** A style line outliving its node does not error,
+  it brings the node back as an unlabelled box — verified by rendering
+  `flowchart TD / A / style B fill:#f9f`, which draws two nodes. So `style`, `class` and
+  `click` statements naming the node are removed with it. `classDef` and `linkStyle` are
+  left alone; they name no node.
+- **A node orphaned by several statements is rescued once**, at the first of them. The edits
+  are worked out front to back for that reason and applied back to front so earlier offsets
+  stay valid.
+
+The UI half has one trap worth keeping:
+
+- **A click opens the node's rename box, and that box swallows Delete.** The keyboard binding
+  alone looked right in review and was completely unreachable in the app: clicking the node
+  to select it puts an `input` under the cursor, so the keystroke edits the label instead.
+  That is what the trash button in the island is for. The key still works once the box is
+  dismissed with Escape, which closes it without clearing the selection.
+
 ### Testing interactions
 
 Synthetic `MouseEvent`s are useful but they are **not** the same as a real mouse, and twice
@@ -289,6 +332,12 @@ expresses the change, so every byte outside it comes back identical.
   All three are fixed by skipping quoted stretches. A fourth had the same shape without
   quoting: `skipShape` counted `((` as nested parens, so a circle's label included the inner
   pair and renaming `A((x))` emitted `A(x)`, quietly demoting it to a rounded rectangle.
+
+  A fifth was the same `|"yes|no"|` a third time, and it is the reason to fix these in
+  *every* reader rather than the one that reported the bug. `findEdgeLabels` got the
+  quote-aware `closingPipe`; the node walk kept a plain `indexOf`, took `no` for a node id,
+  then ran the unpaired quote to the end of the file — so every node after such an edge
+  became unselectable. Both readers share `closingPipe` now.
 
   Any new emitter or reader needs the same check: **write a value, read it back, write
   again** — and look at the highlighting, not just the data.

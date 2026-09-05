@@ -226,8 +226,13 @@ body {
   cursor: pointer;
 }
 
-.island button:hover {
+.island button:hover:not(:disabled) {
   background: var(--island-hover);
+}
+
+.island button:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 .island .zoom {

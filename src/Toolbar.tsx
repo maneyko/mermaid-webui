@@ -8,6 +8,7 @@ interface ToolbarProps {
   shape: Shape
   onPickShape: (shape: Shape) => void
   hasSelection: boolean
+  onDelete: () => void
   scale: number
   onZoomIn: () => void
   onZoomOut: () => void
@@ -66,6 +67,27 @@ function ArrowIcon() {
   )
 }
 
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 6.5h16" />
+      <path d="M9.5 6.5V4.5h5v2" />
+      <path d="M6.5 6.5 7.5 20h9l1-13.5" />
+      <path d="M10 10v6.5M14 10v6.5" />
+    </svg>
+  )
+}
+
 const TOOLS: { tool: Tool; label: string; shortcut: string; icon: () => React.ReactElement }[] = [
   { tool: 'select', label: 'Select', shortcut: '1', icon: CursorIcon },
   { tool: 'hand', label: 'Hand', shortcut: 'H', icon: HandIcon },
@@ -103,6 +125,7 @@ export default function Toolbar({
   shape,
   onPickShape,
   hasSelection,
+  onDelete,
   scale,
   onZoomIn,
   onZoomOut,
@@ -155,6 +178,21 @@ export default function Toolbar({
             <span className="shortcut">{SHAPE_SHORTCUTS[position]}</span>
           </button>
         ))}
+
+        <span className="separator" />
+
+        {/* Clicking a node opens its rename box, which swallows the Delete key, so the
+            keyboard shortcut alone would leave this unreachable by the ordinary gesture. */}
+        <button
+          type="button"
+          className="tool"
+          disabled={!hasSelection}
+          aria-label="Delete selection"
+          title="Delete the selected node and its edges (Delete)"
+          onClick={onDelete}
+        >
+          <TrashIcon />
+        </button>
       </div>
 
       <div className="island zoom-controls">

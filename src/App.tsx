@@ -6,6 +6,7 @@ import {
   addConnectedNode,
   addStandaloneNode,
   connectNodes,
+  deleteNode,
   renameEdgeLabel,
   renameLabel,
   setNodeShape,
@@ -85,6 +86,11 @@ export default function App() {
           setSelected(null)
           setReveal(null)
           return added.nodeId
+        }}
+        onDelete={(nodeId) => {
+          setSource(deleteNode(source, nodeId))
+          setSelected(null)
+          setReveal(null)
         }}
       />
     </main>

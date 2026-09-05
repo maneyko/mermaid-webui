@@ -2,7 +2,7 @@
 // the smallest possible edit applied: byte ranges outside the span being changed must come
 // back identical, because the user hand-edits this text and keeps it in git.
 
-import { findEdgeLabels, findNodes } from './correlate'
+import { findEdgeLabels, findNodes, findStatements, type Span, type Statement } from './correlate'
 
 // Anything that would terminate a shape early, or that mermaid reads as syntax inside one.
 const NEEDS_QUOTING = /["[\]{}()|<>]/
@@ -130,6 +130,91 @@ export function setNodeShape(source: string, nodeId: string, shape: Shape): stri
 export function connectNodes(source: string, fromId: string, toId: string): string {
   const body = source.endsWith('\n') || source === '' ? source : `${source}\n`
   return `${body}${trailingIndent(source)}${fromId} --> ${toId}\n`
+}
+
+// Statements that only attach something to a node, and so have to leave with it. `style X`
+// is the one that matters: mermaid compiles it to an addVertex, so a style line outliving
+// its node brings the node back as a blank box rather than erroring.
+const ATTACHMENTS = new Set(['style', 'class', 'click'])
+
+function lineStartOf(source: string, index: number): number {
+  return source.lastIndexOf('\n', index - 1) + 1
+}
+
+function indentOf(source: string, index: number): string {
+  const prefix = source.slice(lineStartOf(source, index), index)
+  return prefix.trim() === '' ? prefix : ''
+}
+
+// A statement alone on its line takes the whole line with it; one packed onto a line with
+// others takes only its own text and the separator that followed it.
+function removalSpan(source: string, statement: Statement): Span {
+  let to = statement.to
+  while (source[to] === ' ' || source[to] === '\t') to += 1
+  if (source[to] === ';') {
+    to += 1
+    while (source[to] === ' ' || source[to] === '\t') to += 1
+  }
+
+  const start = lineStartOf(source, statement.from)
+  if (source.slice(start, statement.from).trim() !== '') return { from: statement.from, to }
+  if (to !== source.length && source[to] !== '\n') return { from: statement.from, to }
+  return { from: start, to: to === source.length ? to : to + 1 }
+}
+
+// Deleting a node deletes its edges and nothing else. Because mermaid declares most nodes
+// inside an edge statement, removing those statements would take the neighbours' labels with
+// them, so any node left without a declaration is re-emitted where its statement stood --
+// which also keeps it inside whatever subgraph it was in.
+export function deleteNode(source: string, nodeId: string): string {
+  const statements = findStatements(source)
+  const doomed = statements.filter(
+    (statement) =>
+      (statement.keyword === null || ATTACHMENTS.has(statement.keyword)) &&
+      statement.nodes.some((node) => node.id === nodeId),
+  )
+  if (doomed.length === 0) return source
+
+  // Keyed by scope as well as id, because a node belongs to the subgraph that mentions it:
+  // losing its only mention inside a box would silently move it out of the box.
+  const key = (scope: number, id: string) => `${scope} ${id}`
+  const surviving = new Set(
+    statements
+      .filter((statement) => statement.keyword === null && !doomed.includes(statement))
+      .flatMap((statement) => statement.nodes.map((node) => key(statement.scope, node.id))),
+  )
+
+  const declarations = findNodes(source)
+  const rescued = new Set<string>()
+
+  // Worked out front to back so a node orphaned by several statements comes back at the first
+  // of them, then applied back to front so the earlier offsets stay valid.
+  const edits = doomed.map((statement) => {
+    const lost: string[] = []
+    if (statement.keyword === null) {
+      for (const node of statement.nodes) {
+        const here = key(statement.scope, node.id)
+        if (node.id === nodeId || surviving.has(here) || rescued.has(here)) continue
+        rescued.add(here)
+        const declaration = declarations.get(node.id)
+        lost.push(
+          declaration === undefined ? node.id : source.slice(declaration.from, declaration.to),
+        )
+      }
+    }
+    return { statement, lost }
+  })
+
+  let result = source
+  for (const { statement, lost } of edits.reverse()) {
+    const span = lost.length === 0 ? removalSpan(source, statement) : statement
+    result =
+      result.slice(0, span.from) +
+      lost.join(`\n${indentOf(source, statement.from)}`) +
+      result.slice(span.to)
+  }
+
+  return result
 }
 
 export function renameLabel(source: string, nodeId: string, label: string): string {

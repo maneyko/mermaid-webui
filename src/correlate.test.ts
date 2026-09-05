@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { findNodes } from './correlate'
+import { findNodes, findStatements } from './correlate'
 
 function spanOf(source: string, id: string): string {
   const node = findNodes(source).get(id)
@@ -95,4 +95,49 @@ test('an unterminated shape does not swallow the rest of the file', () => {
   const source = 'flowchart TD\n  A[Unclosed\n  B --> C\n'
   expect(spanOf(source, 'A')).toBe('A')
   expect(findNodes(source).has('C')).toBe(true)
+})
+
+// findEdgeLabels learned to skip the quotes here; this walk had not, so it took `no` for a
+// node and then ran the unpaired quote to the end of the file, losing every node after it.
+test('a pipe inside a quoted edge label does not end the label', () => {
+  const source = 'flowchart TD\n  A -->|"yes|no"| B\n  B --> C\n'
+  expect([...findNodes(source).keys()]).toEqual(['A', 'B', 'C'])
+})
+
+const text = (source: string) => findStatements(source).map((s) => source.slice(s.from, s.to))
+
+test('statements are split on newlines, trimmed of their indentation', () => {
+  expect(text('flowchart TD\n  A --> B\n  B --> C\n')).toEqual([
+    'flowchart TD',
+    'A --> B',
+    'B --> C',
+  ])
+})
+
+test('a semicolon separates statements, but one inside a label does not', () => {
+  expect(text('flowchart TD\n  A --> B; C --> D\n')).toEqual([
+    'flowchart TD',
+    'A --> B',
+    'C --> D',
+  ])
+  expect(text('flowchart TD\n  A["a;b"] --> B\n')).toEqual(['flowchart TD', 'A["a;b"] --> B'])
+})
+
+test('a statement reports its leading keyword, and a graph statement reports none', () => {
+  const source = 'flowchart TD\n  A --> B\n  style A fill:#f9f\n'
+  expect(findStatements(source).map((s) => s.keyword)).toEqual(['flowchart', null, 'style'])
+})
+
+test('statements know which subgraph encloses them', () => {
+  const source = 'flowchart TD\n  subgraph Box\n    A --> B\n  end\n  B --> C\n'
+  const statements = findStatements(source)
+  // The header and the `end` belong outside the box; only `A --> B` is inside it.
+  expect(statements.map((s) => s.scope)).toEqual([-1, -1, 1, -1, -1])
+})
+
+test('sibling subgraphs are different scopes', () => {
+  const source = 'flowchart TD\n  subgraph One\n    A\n  end\n  subgraph Two\n    B\n  end\n'
+  const statements = findStatements(source)
+  expect(statements[2]?.scope).toBe(1)
+  expect(statements[5]?.scope).toBe(4)
 })

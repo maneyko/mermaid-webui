@@ -5,9 +5,10 @@ the left, live diagram on the right, tool picker on top. Runs entirely in the br
 backend.
 
 **Status: it edits.** Click a node to select it and rename it in place; drag between nodes to
-connect them; drag out from one to add a new node; pick a shape to restyle what is selected.
-Every change rewrites the source with the smallest possible edit. What is missing is deleting
-anything, undo outside the code pane, and saving your work. See [Work items](#work-items).
+connect them; drag out from one to add a new node; pick a shape to restyle what is selected;
+delete a node and its edges. Every change rewrites the source with the smallest possible edit.
+What is missing is deleting an edge on its own, undo outside the code pane, and saving your
+work. See [Work items](#work-items).
 
 ## Why this is not a whiteboard
 
@@ -94,20 +95,32 @@ viable at all; everything before it was chrome.
       clicking blank canvas creates a standalone node of that shape. Hovering rings whatever
       a click would act on, under every tool except the hand.
 
+- [x] **9. Delete a node.** With a node selected, the trash button in the island — or the
+      Delete key — removes it along with every edge that mentioned it, and nothing else. A
+      neighbour whose only declaration was on one of those lines is re-emitted where the line
+      stood, keeping its shape, its label and its subgraph, so deleting one node never
+      silently takes another with it. `style`, `class` and `click` lines naming the node go
+      too: mermaid compiles `style X` into a vertex, so leaving one behind would bring the
+      node back as a blank box. This is also what gave the scanner statement spans, which the
+      structural drags below need.
+
 Not done yet, roughly in the order I would take them:
 
+- [ ] **Delete an edge.** Only whole nodes can be deleted so far. Edges are not selectable at
+      all: a click hit-tests nodes and edge labels, and an unlabelled edge has no clickable
+      target. Needs hit-testing on the `path.flowchart-link` elements, a selection that is not
+      a node, and a ring that can highlight one. The source half is mostly done — removing an
+      edge orphans nodes exactly the way removing a node does, and `deleteNode` already has
+      that machinery.
 - [ ] **Undo from the canvas.** Canvas edits *are* undoable — they go through CodeMirror's
       history like any other change — but only while the code pane has focus, because that is
       where the keymap lives. After a misjudged drag, cmd+Z on the canvas does nothing. Needs
-      a window-level binding that routes undo into the editor, and a matching redo.
-- [ ] **Delete.** Nodes and edges can be added but never removed from the canvas. Less urgent
-      than it sounds, because clicking a node already selects its exact declaration in the
-      source, so deleting the line by hand is easy. Wants a decision first: deleting a node
-      has to do something about the edges that mention it.
+      a window-level binding that routes undo into the editor, and a matching redo. More
+      valuable now that a single click can delete four edges.
 - [ ] **The other structural drags.** Reorder siblings by dragging one past another, and
-      reparent a node by dragging it into a subgraph. Both need spans the scanner does not
-      produce yet — whole statements rather than nodes — and reparenting also needs subgraph
-      hit-testing, since subgraphs render as `g.cluster` and nothing selects those.
+      reparent a node by dragging it into a subgraph. Reparenting needs subgraph hit-testing,
+      since subgraphs render as `g.cluster` and nothing selects those. The statement spans
+      both wanted now exist, from item 9.
 
 ## Scope
 
@@ -130,7 +143,11 @@ offering connection points — four points would imply a choice that cannot be e
 - **A standalone node does not appear where you clicked.** It has no edges, so dagre lays it
   out as a separate component and places it wherever it likes. Nothing can be done about the
   position without abandoning auto-layout; the rename box does at least follow the node to
-  wherever it actually landed.
+  wherever it actually landed. Nodes left behind by a delete land the same way, for the same
+  reason — they really have no edges any more.
+- **Deleting a node listed in a shared `class` line takes the whole line.** `class A,B big`
+  names two nodes; deleting A removes the statement, so B quietly loses its class. Splitting
+  the id list would fix it. Not reachable from the canvas, since nothing writes `class`.
 
 ## Prior art
 
