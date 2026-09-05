@@ -126,6 +126,26 @@ viable at all; everything before it was chrome.
 
 Not done yet, roughly in the order I would take them:
 
+- [ ] **Autosave.** A debounced write of the source to `localStorage`, read back on startup,
+      falling back to the sample document. No UI. This is only crash protection — the undo
+      history does not survive a reload either way — and it is deliberately separate from the
+      item below, because browser storage is the wrong home for work you care about: it is
+      cleared by "clear browsing data", tied to one profile on one machine, and invisible to
+      git, which is the whole reason to keep diagrams as `.mmd`.
+- [ ] **Open and save `.mmd` files.** Where the browser has the File System Access API, this
+      is a real Save: open a file, edit it, and cmd+S writes back to that same file, so the
+      diagram lives in a git repo rather than in a browser. Elsewhere it degrades to a
+      download and a file input, which is Export rather than Save — every save lands a fresh
+      copy in the downloads folder. Two code paths for one job is a real cost and the
+      fallback is the half that will rot; it is deliberate, so that the tool is not
+      Chrome-only.
+- [ ] **A library of past diagrams, if it is still wanted afterwards.** A panel listing
+      what you have worked on. Deliberately last, because once files work the filesystem is
+      already the library, with names, folders, backups and history. If it is built: name
+      entries from the first node's label rather than a timestamp — `2026-09-04 21:51` tells
+      you nothing about which diagram it is, and `findNodes` already knows the answer — and
+      settle when a new entry is created, which is the question that makes such lists
+      annoying. Snapshotting every edit buries you; only saving on demand leaves it empty.
 - [ ] **The other structural drags.** Reorder siblings by dragging one past another, and
       reparent a node by dragging it into a subgraph. Reparenting needs subgraph hit-testing,
       since subgraphs render as `g.cluster` and nothing selects those. The statement spans
