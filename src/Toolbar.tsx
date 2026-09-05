@@ -188,7 +188,7 @@ export default function Toolbar({
           className="tool"
           disabled={!canDelete}
           aria-label="Delete selection"
-          title="Delete the selected node or edge (Delete)"
+          title="Delete the selection (Delete)"
           onClick={onDelete}
         >
           <TrashIcon />

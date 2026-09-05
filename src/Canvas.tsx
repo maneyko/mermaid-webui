@@ -119,14 +119,8 @@ export type EditTarget =
   | { kind: 'edge'; index: number }
   | { kind: 'edgeLabel'; index: number }
 
-// An edge carries no label of its own to rename, and an edge label is not a thing you delete:
-// clearing its text is a rename.
+// An edge carries no label of its own to rename. Everything selectable can be deleted.
 export type Renameable = Exclude<EditTarget, { kind: 'edge' }>
-export type Deletable = Exclude<EditTarget, { kind: 'edgeLabel' }>
-
-export function deletable(target: EditTarget | null): Deletable | null {
-  return target === null || target.kind === 'edgeLabel' ? null : target
-}
 
 interface Editing {
   target: Renameable
@@ -159,7 +153,7 @@ interface CanvasProps {
   onSetShape: (nodeId: string, shape: Shape) => void
   onAddNode: (fromId: string, shape: Shape) => string
   onAddStandalone: (shape: Shape) => string
-  onDelete: (target: Deletable) => void
+  onDelete: (target: EditTarget) => void
 }
 
 export default function Canvas({
@@ -255,7 +249,6 @@ export default function Canvas({
 
   // The shape buttons and delete act on a node; an edge label is selectable but is not one.
   const selectedNode = selected?.kind === 'node' ? selected.nodeId : null
-  const selectedTarget = deletable(selected)
 
   const centreOf = (element: Element): Point => {
     const bounds = element.getBoundingClientRect()
@@ -346,7 +339,7 @@ export default function Canvas({
       if (event.key === 'h') setTool('hand')
       if (event.key === '2' || event.key === 'a') setTool('arrow')
 
-      const current = deletable(latestSelected.current)
+      const current = latestSelected.current
       if ((event.key === 'Backspace' || event.key === 'Delete') && current !== null) {
         event.preventDefault()
         latestDelete.current(current)
@@ -501,9 +494,9 @@ export default function Canvas({
         shape={shape}
         onPickShape={pickShape}
         hasNodeSelection={selectedNode !== null}
-        canDelete={selectedTarget !== null}
+        canDelete={selected !== null}
         onDelete={() => {
-          if (selectedTarget !== null) onDelete(selectedTarget)
+          if (selected !== null) onDelete(selected)
         }}
         scale={view.scale}
         onZoomIn={panZoom.zoomIn}

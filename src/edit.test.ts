@@ -4,6 +4,7 @@ import {
   addStandaloneNode,
   connectNodes,
   deleteEdge,
+  deleteEdgeLabel,
   deleteNode,
   edgeCount,
   nextNodeId,
@@ -412,6 +413,38 @@ test('a split half stays inside its subgraph', () => {
 
 test('an out-of-range edge index leaves the source untouched', () => {
   expect(deleteEdge(HUB, 9)).toBe(HUB)
+})
+
+test('deleting an edge label takes the pipes and leaves the edge', () => {
+  const source = 'flowchart TD\n  A[Christmas] -->|Get money| B(Go shopping)\n'
+  const next = deleteEdgeLabel(source, 0)
+  expect(next).toBe('flowchart TD\n  A[Christmas] --> B(Go shopping)\n')
+  expect(edgeCount(next)).toBe(1)
+  expect(edgeLabelCount(next)).toBe(0)
+})
+
+// Clearing the text is a rename, and mermaid has no empty label, so that leaves a blank box
+// riding on the edge. Deleting is the only way to get the edge back to bare.
+test('deleting a label is not the same as renaming it to nothing', () => {
+  const source = 'flowchart TD\n  A -->|Get money| B\n'
+  expect(renameEdgeLabel(source, 0, '')).toBe('flowchart TD\n  A -->|" "| B\n')
+  expect(deleteEdgeLabel(source, 0)).toBe('flowchart TD\n  A --> B\n')
+})
+
+test('deleting one label leaves the others in place', () => {
+  const next = deleteEdgeLabel(LABELLED, 1)
+  expect(edgeLabelCount(next)).toBe(2)
+  expect([0, 1].map((i) => edgeLabelOf(next, i))).toEqual(['Get money', 'Three'])
+})
+
+test('deleting a label that had to be quoted takes the quotes with it', () => {
+  expect(deleteEdgeLabel('flowchart TD\n  A -->|"yes|no"| B\n', 0)).toBe(
+    'flowchart TD\n  A --> B\n',
+  )
+})
+
+test('an out-of-range label index leaves the source untouched', () => {
+  expect(deleteEdgeLabel(LABELLED, 9)).toBe(LABELLED)
 })
 
 test('what deleting an edge writes is readable back by the scanner', () => {

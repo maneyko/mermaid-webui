@@ -320,6 +320,10 @@ The UI half has two traps worth keeping:
   inserted behind it to be the hit target, rebuilt with the SVG on every render, and the
   visible link is set `pointer-events: none` so the topmost thing under the cursor is always
   the handle rather than sometimes the line.
+- **Deleting an edge label is not renaming it to nothing.** `deleteEdgeLabel` removes the
+  pipes as well, leaving `A --> B`; `renameEdgeLabel(source, i, '')` leaves `|" "|`, because
+  mermaid has no empty label and `quoteLabel` stores a cleared one as a quoted blank. Both
+  are wanted -- one clears the text, the other takes the label off the edge.
 
 - **A click used to open the node's rename box, and that box swallowed Delete.** The keyboard
   binding looked right in review and was unreachable in the app: clicking the node to select

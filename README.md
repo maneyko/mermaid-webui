@@ -5,10 +5,10 @@ the left, live diagram on the right, tool picker on top. Runs entirely in the br
 backend.
 
 **Status: it edits.** Click a node, an edge or an edge label to select it, double-click to
-rename it in place; drag between nodes to connect them; drag out from one to add a new node;
-pick a shape to restyle what is selected; delete a node or an edge; undo from anywhere with
-cmd+Z. Every change rewrites the source with the smallest possible edit. What is missing is
-saving your work. See [Work items](#work-items).
+rename it in place, Delete to remove it; drag between nodes to connect them; drag out from one
+to add a new node; pick a shape to restyle what is selected; undo from anywhere with cmd+Z.
+Every change rewrites the source with the smallest possible edit. What is missing is saving
+your work. See [Work items](#work-items).
 
 ## Why this is not a whiteboard
 
@@ -119,6 +119,10 @@ viable at all; everything before it was chrome.
       than removing the statement, so `A --> B --> C` losing its first edge leaves `B --> C`
       standing. A half that is only a bare reference to a node mentioned elsewhere is dropped;
       one that would take a node or its label with it is kept.
+- [x] **13. Delete an edge label.** Everything you can select, you can now delete. Deleting a
+      label takes the pipes with it, leaving `A --> B` — which is not what renaming it to
+      nothing does, because mermaid has no empty label and stores a cleared one as a quoted
+      blank that still renders an empty box on the edge.
 
 Not done yet, roughly in the order I would take them:
 

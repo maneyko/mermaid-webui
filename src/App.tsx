@@ -7,6 +7,7 @@ import {
   addStandaloneNode,
   connectNodes,
   deleteEdge,
+  deleteEdgeLabel,
   deleteNode,
   renameEdgeLabel,
   renameLabel,
@@ -98,7 +99,9 @@ export default function App() {
           setSource(
             target.kind === 'node'
               ? deleteNode(source, target.nodeId)
-              : deleteEdge(source, target.index),
+              : target.kind === 'edge'
+                ? deleteEdge(source, target.index)
+                : deleteEdgeLabel(source, target.index),
           )
           setSelected(null)
           setReveal(null)

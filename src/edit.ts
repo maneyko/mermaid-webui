@@ -233,6 +233,15 @@ export function edgeCount(source: string): number {
   return findEdges(source).length
 }
 
+// Takes the pipes with it, leaving `A --> B`. Not the same as renaming the label to nothing:
+// mermaid has no empty label, so a cleared one is stored as a quoted blank and still renders
+// an empty box sitting on the edge.
+export function deleteEdgeLabel(source: string, index: number): string {
+  const span = findEdgeLabels(source)[index]
+  if (span === undefined) return source
+  return source.slice(0, span.from - 1) + source.slice(span.to + 1)
+}
+
 // Deleting an edge splits the statement that carried it, rather than removing it: the halves
 // either side of the link are still chains, and `A --> B --> C` losing its first edge has to
 // leave `B --> C` behind. A half that is a single node is dropped when it is only a bare
