@@ -72,18 +72,103 @@ function trailingIndent(source: string): string {
   return DEFAULT_INDENT
 }
 
+// `key` is mermaid's own short name for the shape, which is what `@{ shape: ... }` takes and
+// what everything here addresses a shape by. Four of them predate that syntax and have
+// delimiters instead; `group` is only for the picker.
 export interface Shape {
+  key: string
   name: string
-  open: string
-  close: string
+  group: string
+  open?: string
+  close?: string
 }
 
+// Mermaid 11.17.2's whole flowchart vocabulary, in the order the picker shows it. The four
+// with delimiters come first so they are also the first four of QUICK_SHAPES.
 export const SHAPES: Shape[] = [
-  { name: 'Rectangle', open: '[', close: ']' },
-  { name: 'Rounded', open: '(', close: ')' },
-  { name: 'Diamond', open: '{', close: '}' },
-  { name: 'Circle', open: '((', close: '))' },
+  { key: 'rect', name: 'Rectangle', group: 'Basic', open: '[', close: ']' },
+  { key: 'rounded', name: 'Rounded', group: 'Basic', open: '(', close: ')' },
+  { key: 'diam', name: 'Diamond', group: 'Basic', open: '{', close: '}' },
+  { key: 'circle', name: 'Circle', group: 'Basic', open: '((', close: '))' },
+  { key: 'stadium', name: 'Stadium', group: 'Basic' },
+  { key: 'dbl-circ', name: 'Double circle', group: 'Basic' },
+  { key: 'sm-circ', name: 'Small circle', group: 'Basic' },
+  { key: 'f-circ', name: 'Filled circle', group: 'Basic' },
+  { key: 'fr-circ', name: 'Framed circle', group: 'Basic' },
+  { key: 'cross-circ', name: 'Crossed circle', group: 'Basic' },
+  { key: 'hex', name: 'Hexagon', group: 'Basic' },
+  { key: 'tri', name: 'Triangle', group: 'Basic' },
+  { key: 'flip-tri', name: 'Flipped triangle', group: 'Basic' },
+  { key: 'lean-r', name: 'Lean right', group: 'Basic' },
+  { key: 'lean-l', name: 'Lean left', group: 'Basic' },
+  { key: 'trap-b', name: 'Trapezoid', group: 'Basic' },
+  { key: 'trap-t', name: 'Flipped trapezoid', group: 'Basic' },
+  { key: 'text', name: 'Text block', group: 'Basic' },
+  { key: 'bang', name: 'Bang', group: 'Basic' },
+
+  { key: 'fr-rect', name: 'Subprocess', group: 'Process' },
+  { key: 'notch-rect', name: 'Card', group: 'Process' },
+  { key: 'lin-rect', name: 'Lined process', group: 'Process' },
+  { key: 'div-rect', name: 'Divided process', group: 'Process' },
+  { key: 'st-rect', name: 'Multi-process', group: 'Process' },
+  { key: 'tag-rect', name: 'Tagged process', group: 'Process' },
+  { key: 'sl-rect', name: 'Manual input', group: 'Process' },
+  { key: 'bow-rect', name: 'Stored data', group: 'Process' },
+  { key: 'win-pane', name: 'Internal storage', group: 'Process' },
+  { key: 'notch-pent', name: 'Loop limit', group: 'Process' },
+  { key: 'curv-trap', name: 'Display', group: 'Process' },
+  { key: 'delay', name: 'Delay', group: 'Process' },
+  { key: 'hourglass', name: 'Collate', group: 'Process' },
+  { key: 'fork', name: 'Fork or join', group: 'Process' },
+  { key: 'bolt', name: 'Com link', group: 'Process' },
+  { key: 'flag', name: 'Paper tape', group: 'Process' },
+  { key: 'odd', name: 'Odd', group: 'Process' },
+  { key: 'brace', name: 'Comment', group: 'Process' },
+  { key: 'brace-r', name: 'Comment right', group: 'Process' },
+  { key: 'braces', name: 'Comment both', group: 'Process' },
+  { key: 'doc', name: 'Document', group: 'Process' },
+  { key: 'docs', name: 'Multi-document', group: 'Process' },
+  { key: 'lin-doc', name: 'Lined document', group: 'Process' },
+  { key: 'tag-doc', name: 'Tagged document', group: 'Process' },
+
+  { key: 'cyl', name: 'Database', group: 'Technical' },
+  { key: 'h-cyl', name: 'Direct access', group: 'Technical' },
+  { key: 'lin-cyl', name: 'Disk storage', group: 'Technical' },
+  { key: 'datastore', name: 'Data store', group: 'Technical' },
+  { key: 'bucket', name: 'Bucket', group: 'Technical' },
+  { key: 'folder', name: 'Folder', group: 'Technical' },
+  { key: 'console', name: 'Console', group: 'Technical' },
+  { key: 'browser', name: 'Browser', group: 'Technical' },
+  { key: 'person', name: 'Person', group: 'Technical' },
+  { key: 'cloud', name: 'Cloud', group: 'Technical' },
 ]
+
+// The four mermaid gives delimiters to, which is also what a hand-written flowchart uses. They
+// stay on the toolbar itself, and the 3-6 shortcuts address this list.
+export const QUICK_SHAPES = SHAPES.filter((shape) => shape.open !== undefined)
+
+// The metadata block is YAML, where an unquoted scalar stops at the first comma: a label of
+// `Hello, world` renders as `Hello`. So this one always quotes, unlike the delimiter forms.
+// `#quot;` is the escape in both -- a backslash is a parse error.
+function quoteMeta(label: string): string {
+  const text = label === '' ? BLANK_LABEL : label
+  return `"${text.replaceAll('"', '#quot;')}"`
+}
+
+// Mermaid has delimiters for four shapes and `@{ shape: ... }` for the other forty-nine, so a
+// declaration is written one way or the other depending on which shape it is for.
+function declaration(nodeId: string, label: string, shape: Shape): string {
+  if (shape.open === undefined || shape.close === undefined) {
+    return `${nodeId}@{ shape: ${shape.key}, label: ${quoteMeta(label)} }`
+  }
+  return `${nodeId}${shape.open}${quoteLabel(label)}${shape.close}`
+}
+
+function occurrences(source: string, nodeId: string): NodeSpan[] {
+  return findStatements(source).flatMap((statement) =>
+    statement.nodes.filter((node) => node.id === nodeId),
+  )
+}
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
@@ -103,9 +188,8 @@ export function nextNodeId(source: string): string {
 function appendNode(source: string, prefix: string, shape: Shape) {
   const nodeId = nextNodeId(source)
   const body = source.endsWith('\n') || source === '' ? source : `${source}\n`
-  const blank = quoteLabel('')
   return {
-    source: `${body}${trailingIndent(source)}${prefix}${nodeId}${shape.open}${blank}${shape.close}\n`,
+    source: `${body}${trailingIndent(source)}${prefix}${declaration(nodeId, '', shape)}\n`,
     nodeId,
   }
 }
@@ -121,18 +205,52 @@ export function addStandaloneNode(source: string, shape: Shape) {
   return appendNode(source, '', shape)
 }
 
-// The label is carried across verbatim rather than re-quoted, so an already-quoted one such as
-// `"a|b"` survives a shape change untouched.
+// What the node is drawn as, so the picker can show which shape is current. Mermaid's aliases
+// -- `db` for `cyl`, and forty more -- are not recognised: an unfamiliar one reports nothing
+// selected, and picking a shape rewrites it into the canonical name anyway.
+export function shapeOf(source: string, nodeId: string): Shape | null {
+  // A separate `A@{ shape: ... }` outranks the declaration, which is how mermaid.ai writes
+  // shapes, so it is what the node is actually drawn as.
+  const node = occurrences(source, nodeId).find((each) => each.meta) ?? findNodes(source).get(nodeId)
+  if (node === undefined) return null
+
+  if (node.meta) {
+    const key = /[{,]\s*shape\s*:\s*"?([\w-]+)/.exec(source.slice(node.from, node.to))?.[1]
+    return SHAPES.find((shape) => shape.key === key) ?? null
+  }
+
+  // A bare id renders as a rectangle, which is the first shape in the list.
+  if (node.labelFrom === null) return SHAPES[0] as Shape
+  const open = source.slice(node.from + nodeId.length, node.labelFrom)
+  return SHAPES.find((shape) => shape.open === open) ?? null
+}
+
+// The label is re-quoted for the shape it moves into rather than carried across as text: the
+// two forms do not quote the same characters, and the metadata block truncates an unquoted
+// label at the first comma.
 export function setNodeShape(source: string, nodeId: string, shape: Shape): string {
-  const node = findNodes(source).get(nodeId)
-  if (node === undefined) return source
+  const declared = findNodes(source).get(nodeId)
+  if (declared === undefined) return source
 
   const label =
-    node.labelFrom === null || node.labelTo === null
-      ? quoteLabel(nodeId)
-      : source.slice(node.labelFrom, node.labelTo)
+    declared.labelFrom === null || declared.labelTo === null
+      ? nodeId
+      : unquoteLabel(source.slice(declared.labelFrom, declared.labelTo))
 
-  return `${source.slice(0, node.from)}${nodeId}${shape.open}${label}${shape.close}${source.slice(node.to)}`
+  // Any other `A@{ shape: ... }` goes back to a bare mention. Mermaid lets one override the
+  // declaration, so leaving it in place would silently outrank the shape just picked.
+  const edits = occurrences(source, nodeId)
+    .filter((node) => node.from === declared.from || node.meta)
+    .map((node) => ({
+      ...node,
+      text: node.from === declared.from ? declaration(nodeId, label, shape) : nodeId,
+    }))
+
+  let result = source
+  for (const edit of edits.reverse()) {
+    result = result.slice(0, edit.from) + edit.text + result.slice(edit.to)
+  }
+  return result
 }
 
 export interface NodeColor {
@@ -285,10 +403,10 @@ export function deleteNode(source: string, nodeId: string): string {
       for (const node of statement.nodes) {
         const here = key(statement.scope, node.id)
         if (node.id === nodeId || rescued.has(here)) continue
-        // A labelled occurrence is where the node's label lives, so it has to come back even
+        // A declaration is where the node's label and shape live, so it has to come back even
         // when the id itself survives: every other mention may be a bare reference, and
         // letting this one go strips the label off a node nobody asked to change.
-        if (surviving.has(here) && node.labelFrom === null) continue
+        if (surviving.has(here) && node.labelFrom === null && !node.meta) continue
         rescued.add(here)
         const declaration = declarations.get(node.id)
         lost.push(
@@ -348,7 +466,8 @@ export function deleteEdge(source: string, index: number): string {
   for (const half of [statement.nodes.slice(0, position), statement.nodes.slice(position)]) {
     const first = half[0] as NodeSpan
     const last = half[half.length - 1] as NodeSpan
-    if (half.length === 1 && first.labelFrom === null && elsewhere.has(first.id)) continue
+    if (half.length === 1 && first.labelFrom === null && !first.meta && elsewhere.has(first.id))
+      continue
     parts.push(source.slice(first.from, last.to))
     for (const node of half) elsewhere.add(node.id)
   }
@@ -361,12 +480,19 @@ export function renameLabel(source: string, nodeId: string, label: string): stri
   const node = findNodes(source).get(nodeId)
   if (node === undefined) return source
 
-  const replacement = quoteLabel(label)
-
   if (node.labelFrom !== null && node.labelTo !== null) {
+    const replacement = node.meta ? quoteMeta(label) : quoteLabel(label)
     return source.slice(0, node.labelFrom) + replacement + source.slice(node.labelTo)
   }
 
+  // `A@{ shape: cyl }` has no delimiters to put a label between, so it goes in the block, after
+  // the last entry rather than after the padding that follows it.
+  if (node.meta) {
+    let end = node.to - 1
+    while (/\s/.test(source[end - 1] as string)) end -= 1
+    return `${source.slice(0, end)}, label: ${quoteMeta(label)}${source.slice(end)}`
+  }
+
   // Bare node: give it a shape in place, leaving every other mention of the id alone.
-  return `${source.slice(0, node.to)}[${replacement}]${source.slice(node.to)}`
+  return `${source.slice(0, node.to)}[${quoteLabel(label)}]${source.slice(node.to)}`
 }

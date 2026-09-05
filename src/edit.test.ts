@@ -19,6 +19,7 @@ import {
   quoteLabel,
   renameEdgeLabel,
   renameLabel,
+  shapeOf,
   unquoteLabel,
 } from './edit'
 
@@ -110,9 +111,9 @@ test('an appended connection is readable by the scanner', () => {
   expect(labelOf(next, 'C')).toBe('Let me think')
 })
 
-const shape = (name: string) => {
-  const found = SHAPES.find((s) => s.name === name)
-  if (found === undefined) throw new Error(`no shape ${name}`)
+const shape = (key: string) => {
+  const found = SHAPES.find((s) => s.key === key)
+  if (found === undefined) throw new Error(`no shape ${key}`)
   return found
 }
 
@@ -122,25 +123,25 @@ test('a new node id avoids every id already in use', () => {
 })
 
 test('adding a connected node appends one line and reports the new id', () => {
-  const added = addConnectedNode(SOURCE, 'C', shape('Diamond'))
+  const added = addConnectedNode(SOURCE, 'C', shape('diam'))
   expect(added.nodeId).toBe('D')
   expect(added.source).toBe(`${SOURCE}  C --> D{" "}\n`)
 })
 
 test('a standalone node is appended with no edge', () => {
-  const added = addStandaloneNode(SOURCE, shape('Rectangle'))
+  const added = addStandaloneNode(SOURCE, shape('rect'))
   expect(added.nodeId).toBe('D')
   expect(added.source).toBe(`${SOURCE}  D[" "]\n`)
 })
 
 test('a standalone node is readable back and nameable', () => {
-  const added = addStandaloneNode(SOURCE, shape('Diamond'))
+  const added = addStandaloneNode(SOURCE, shape('diam'))
   expect(labelOf(added.source, 'D')).toBe(' ')
   expect(renameLabel(added.source, 'D', 'Alone')).toContain('D{Alone}')
 })
 
 test('a newly added node is readable back by the scanner', () => {
-  const added = addConnectedNode(SOURCE, 'C', shape('Circle'))
+  const added = addConnectedNode(SOURCE, 'C', shape('circle'))
   expect(added.source).toContain('C --> D((" "))')
   expect(labelOf(added.source, 'D')).toBe(' ')
   // The shape must survive being named, which is what the doubled-delimiter fix is for.
@@ -148,7 +149,7 @@ test('a newly added node is readable back by the scanner', () => {
 })
 
 test('changing a shape keeps the label and the rest of the line', () => {
-  expect(setNodeShape(SOURCE, 'A', shape('Diamond'))).toBe(`flowchart TD
+  expect(setNodeShape(SOURCE, 'A', shape('diam'))).toBe(`flowchart TD
   A{Christmas} -->|Get money| B(Go shopping)
   B --> C{Let me think}
 `)
@@ -156,24 +157,116 @@ test('changing a shape keeps the label and the rest of the line', () => {
 
 test('changing a shape carries an already-quoted label across untouched', () => {
   const source = 'flowchart TD\n  A["a|b"] --> B\n'
-  const next = setNodeShape(source, 'A', shape('Rounded'))
+  const next = setNodeShape(source, 'A', shape('rounded'))
   expect(next).toBe('flowchart TD\n  A("a|b") --> B\n')
   expect(labelOf(next, 'A')).toBe('a|b')
 })
 
 test('giving a bare node a shape uses its id as the label it already displayed', () => {
-  expect(setNodeShape('flowchart TD\n  A --> B\n', 'B', shape('Diamond'))).toBe(
+  expect(setNodeShape('flowchart TD\n  A --> B\n', 'B', shape('diam'))).toBe(
     'flowchart TD\n  A --> B{B}\n',
   )
 })
 
 test('changing shape is reversible', () => {
-  const diamond = setNodeShape(SOURCE, 'A', shape('Diamond'))
-  expect(setNodeShape(diamond, 'A', shape('Rectangle'))).toBe(SOURCE)
+  const diamond = setNodeShape(SOURCE, 'A', shape('diam'))
+  expect(setNodeShape(diamond, 'A', shape('rect'))).toBe(SOURCE)
 })
 
 test('an unknown node keeps its shape request to itself', () => {
-  expect(setNodeShape(SOURCE, 'ZZZ', shape('Circle'))).toBe(SOURCE)
+  expect(setNodeShape(SOURCE, 'ZZZ', shape('circle'))).toBe(SOURCE)
+})
+
+// Only four shapes have delimiters; the other forty-nine are written as metadata, which
+// replaces the declaration rather than sitting on a line of its own.
+test('a shape with no delimiters is written into the declaration', () => {
+  expect(setNodeShape(SOURCE, 'A', shape('cyl'))).toBe(`flowchart TD
+  A@{ shape: cyl, label: "Christmas" } -->|Get money| B(Go shopping)
+  B --> C{Let me think}
+`)
+})
+
+test('a metadata shape is reversible, back to delimiters', () => {
+  const cylinder = setNodeShape(SOURCE, 'A', shape('cyl'))
+  expect(setNodeShape(cylinder, 'A', shape('rect'))).toBe(SOURCE)
+  expect(setNodeShape(cylinder, 'A', shape('hex'))).toContain('A@{ shape: hex, label: "Christmas" }')
+})
+
+test('the metadata form always quotes, because an unquoted label stops at the comma', () => {
+  const source = setNodeShape('flowchart TD\n  A[Hello, world]\n', 'A', shape('cyl'))
+  expect(source).toBe('flowchart TD\n  A@{ shape: cyl, label: "Hello, world" }\n')
+  expect(labelOf(source, 'A')).toBe('Hello, world')
+})
+
+test('a bare node given a metadata shape keeps showing its id', () => {
+  expect(setNodeShape('flowchart TD\n  A --> B\n', 'B', shape('doc'))).toBe(
+    'flowchart TD\n  A --> B@{ shape: doc, label: "B" }\n',
+  )
+})
+
+// Mermaid lets a separate `A@{ shape: ... }` override the declaration -- it is how mermaid.ai
+// writes shapes -- so one left standing would outrank the shape just picked.
+test('a separate metadata statement goes back to a bare mention', () => {
+  const source = 'flowchart TD\n  A["Cylinder"] --> B\n  A@{ shape: cyl }\n'
+  expect(setNodeShape(source, 'A', shape('hex'))).toBe(
+    'flowchart TD\n  A@{ shape: hex, label: "Cylinder" } --> B\n  A\n',
+  )
+})
+
+test('renaming a metadata node replaces only the label value', () => {
+  const source = 'flowchart TD\n  A@{ shape: cyl, label: "Christmas" } --> B\n'
+  expect(renameLabel(source, 'A', 'Hanukkah')).toBe(
+    'flowchart TD\n  A@{ shape: cyl, label: "Hanukkah" } --> B\n',
+  )
+})
+
+test('renaming a metadata node that has no label adds one', () => {
+  const source = 'flowchart TD\n  A@{ shape: cyl }\n'
+  const next = renameLabel(source, 'A', 'Christmas')
+  expect(next).toBe('flowchart TD\n  A@{ shape: cyl, label: "Christmas" }\n')
+  expect(labelOf(next, 'A')).toBe('Christmas')
+})
+
+test('what a metadata shape writes is readable back by the scanner', () => {
+  const next = setNodeShape(SOURCE, 'B', shape('cyl'))
+  expect(labelOf(next, 'B')).toBe('Go shopping')
+  expect(edgeCount(next)).toBe(2)
+  expect(edgeLabelCount(next)).toBe(1)
+  expect(nextNodeId(next)).toBe('D')
+  expect(renameLabel(next, 'B', 'a|b, "c"')).toContain('label: "a|b, #quot;c#quot;"')
+})
+
+test('adding a node with a metadata shape', () => {
+  const added = addConnectedNode(SOURCE, 'C', shape('cyl'))
+  expect(added.source).toBe(`${SOURCE}  C --> D@{ shape: cyl, label: " " }\n`)
+  expect(labelOf(added.source, 'D')).toBe(' ')
+})
+
+test('the current shape reads back from either form', () => {
+  expect(shapeOf(SOURCE, 'A')?.key).toBe('rect')
+  expect(shapeOf(SOURCE, 'C')?.key).toBe('diam')
+  expect(shapeOf('flowchart TD\n  A --> B\n', 'B')?.key).toBe('rect')
+  expect(shapeOf('flowchart TD\n  A((Round))\n', 'A')?.key).toBe('circle')
+  expect(shapeOf('flowchart TD\n  A@{ shape: h-cyl }\n', 'A')?.key).toBe('h-cyl')
+  expect(shapeOf('flowchart TD\n  A["x"]\n  A@{ shape: hex }\n', 'A')?.key).toBe('hex')
+  // An alias mermaid accepts but this list does not carry, and a node that is not there.
+  expect(shapeOf('flowchart TD\n  A@{ shape: db }\n', 'A')).toBeNull()
+  expect(shapeOf(SOURCE, 'ZZZ')).toBeNull()
+})
+
+test('a metadata declaration is rescued when its statement is deleted', () => {
+  const source = 'flowchart TD\n  A --> B@{ shape: cyl }\n  B --> C\n'
+  expect(deleteNode(source, 'A')).toBe('flowchart TD\n  B@{ shape: cyl }\n  B --> C\n')
+})
+
+test('splitting a statement keeps a half that carries a metadata shape', () => {
+  const source = 'flowchart TD\n  A --> B@{ shape: cyl }\n  B --> C\n'
+  expect(deleteEdge(source, 0)).toBe('flowchart TD\n  A\n  B@{ shape: cyl }\n  B --> C\n')
+})
+
+test('deleting a node takes its metadata statement with it', () => {
+  const source = 'flowchart TD\n  A --> B\n  B@{ shape: cyl }\n'
+  expect(deleteNode(source, 'B')).toBe('flowchart TD\n  A\n')
 })
 
 const LABELLED = `flowchart TD
@@ -336,7 +429,7 @@ test('a node that still has a declaration elsewhere is not re-emitted', () => {
 test('a rescued node keeps its shape and label', () => {
   const next = deleteNode(HUB, 'C')
   expect(labelOf(next, 'D')).toBe('Laptop')
-  expect(setNodeShape(next, 'D', shape('Circle'))).toContain('D((Laptop))')
+  expect(setNodeShape(next, 'D', shape('circle'))).toContain('D((Laptop))')
 })
 
 test('a bare node comes back bare rather than gaining a shape', () => {

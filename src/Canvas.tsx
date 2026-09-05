@@ -7,7 +7,8 @@ import {
   edgeLabelCount,
   edgeLabelOf,
   labelOf,
-  SHAPES,
+  QUICK_SHAPES,
+  shapeOf,
   type NodeColor,
   type Shape,
 } from './edit'
@@ -169,7 +170,7 @@ export default function Canvas({
   onDelete,
 }: CanvasProps) {
   const [tool, setTool] = useState<Tool>('select')
-  const [shape, setShape] = useState<Shape>(SHAPES[0] as Shape)
+  const [shape, setShape] = useState<Shape>(QUICK_SHAPES[0] as Shape)
   // A node added by dragging out does not exist in the DOM until the next render, so the
   // rename it should open with is deferred until the SVG that contains it arrives.
   const pendingRename = useRef<string | null>(null)
@@ -346,7 +347,7 @@ export default function Canvas({
       }
 
       const shapeIndex = ['3', '4', '5', '6'].indexOf(event.key)
-      const picked = shapeIndex === -1 ? undefined : SHAPES[shapeIndex]
+      const picked = shapeIndex === -1 ? undefined : QUICK_SHAPES[shapeIndex]
       if (picked !== undefined) latestPickShape.current(picked)
     }
 
@@ -493,6 +494,7 @@ export default function Canvas({
         file={file}
         onToolChange={setTool}
         shape={shape}
+        nodeShape={selectedNode === null ? null : shapeOf(source, selectedNode)}
         onPickShape={pickShape}
         hasNodeSelection={selectedNode !== null}
         color={selectedNode === null ? null : colorOf(source, selectedNode)}

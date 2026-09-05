@@ -3,12 +3,15 @@
 // ourselves. This is deliberately a scanner and not a parser: it locates node declarations
 // and nothing else.
 
+// `meta` marks the `A@{ shape: cyl }` form, which is a declaration carrying no delimiters, so
+// a null `labelFrom` on one of those does not mean the occurrence is a bare mention.
 export interface NodeSpan {
   id: string
   from: number
   to: number
   labelFrom: number | null
   labelTo: number | null
+  meta: boolean
 }
 
 const KEYWORDS = new Set([
@@ -81,6 +84,49 @@ function skipShape(source: string, index: number, open: string, close: string): 
     }
   }
   return null
+}
+
+// The shape attached to a node reference: one of the classic delimiter pairs, or mermaid 11's
+// `@{ shape: ... }` metadata block. Returns the index just past it, or null when the reference
+// carries none.
+function skipSuffix(source: string, idEnd: number): number | null {
+  if (source.startsWith('@{', idEnd)) return skipShape(source, idEnd + 1, '{', '}')
+  const opener = source[idEnd]
+  const closer = opener === undefined ? undefined : SHAPE_CLOSERS[opener]
+  if (opener === undefined || closer === undefined) return null
+  return skipShape(source, idEnd, opener, closer)
+}
+
+// The value of `label:` inside a metadata block, quotes included so it unquotes the way a
+// delimited label does. An unquoted value ends at the comma or the closing brace, which is
+// where mermaid's own YAML ends it.
+function metaLabel(source: string, from: number, to: number): Span | null {
+  const key = /[{,]\s*label\s*:\s*/.exec(source.slice(from, to))
+  if (key === null) return null
+
+  const start = from + key.index + key[0].length
+  if (source[start] === '"') return { from: start, to: skipDelimited(source, start, '"') }
+
+  let end = start
+  while (end < to && source[end] !== ',' && source[end] !== '}') end += 1
+  while (end > start && /\s/.test(source[end - 1] as string)) end -= 1
+  return { from: start, to: end }
+}
+
+// Where the label sits in a declaration, given the span the id and its suffix occupy.
+function declarationSpan(source: string, id: string, from: number, to: number): NodeSpan {
+  const idEnd = from + id.length
+
+  if (source[idEnd] === '@') {
+    const label = metaLabel(source, idEnd + 1, to)
+    return { id, from, to, labelFrom: label?.from ?? null, labelTo: label?.to ?? null, meta: true }
+  }
+
+  // A doubled delimiter is one shape, not nesting: the label of `A((Circle))` is `Circle`, and
+  // treating the inner pair as part of it would make a rename rewrite `A((x))` as `A(x)` and
+  // quietly turn the circle into a rounded rectangle.
+  const width = source[idEnd + 1] === source[idEnd] ? 2 : 1
+  return { id, from, to, labelFrom: idEnd + width, labelTo: to - width, meta: false }
 }
 
 // A statement is one mermaid instruction: the text between newlines or semicolons, trimmed.
@@ -174,28 +220,14 @@ export function findStatements(source: string): Statement[] {
       continue
     }
 
-    const opener = source[idEnd]
-    const closer = opener === undefined ? undefined : SHAPE_CLOSERS[opener]
-    if (opener !== undefined && closer !== undefined) {
-      const shapeEnd = skipShape(source, idEnd, opener, closer)
-      if (shapeEnd !== null) {
-        // A doubled delimiter is one shape, not nesting: the label of `A((Circle))` is
-        // `Circle`, and treating the inner pair as part of it would make a rename rewrite
-        // `A((x))` as `A(x)` and quietly turn the circle into a rounded rectangle.
-        const width = source[idEnd + 1] === opener ? 2 : 1
-        nodes.push({
-          id,
-          from: index,
-          to: shapeEnd,
-          labelFrom: idEnd + width,
-          labelTo: shapeEnd - width,
-        })
-        index = shapeEnd
-        continue
-      }
+    const suffix = skipSuffix(source, idEnd)
+    if (suffix !== null) {
+      nodes.push(declarationSpan(source, id, index, suffix))
+      index = suffix
+      continue
     }
 
-    nodes.push({ id, from: index, to: idEnd, labelFrom: null, labelTo: null })
+    nodes.push({ id, from: index, to: idEnd, labelFrom: null, labelTo: null, meta: false })
     index = idEnd
   }
 
@@ -315,9 +347,7 @@ export function findEdgeLabels(source: string): Span[] {
     }
 
     const idEnd = index + identifier[0].length
-    const opener = source[idEnd]
-    const closer = opener === undefined ? undefined : SHAPE_CLOSERS[opener]
-    index = closer === undefined || opener === undefined ? idEnd : (skipShape(source, idEnd, opener, closer) ?? idEnd)
+    index = skipSuffix(source, idEnd) ?? idEnd
   }
 
   return spans

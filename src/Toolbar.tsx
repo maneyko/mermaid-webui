@@ -1,4 +1,5 @@
-import { COLORS, SHAPES, type NodeColor, type Shape } from './edit'
+import { COLORS, QUICK_SHAPES, type NodeColor, type Shape } from './edit'
+import ShapeMenu, { ShapeIcon } from './ShapeMenu'
 
 export type Tool = 'select' | 'hand' | 'arrow' | 'shape'
 
@@ -16,6 +17,7 @@ interface ToolbarProps {
   file: FileControls
   onToolChange: (tool: Tool) => void
   shape: Shape
+  nodeShape: Shape | null
   onPickShape: (shape: Shape) => void
   hasNodeSelection: boolean
   color: NodeColor | null
@@ -107,29 +109,6 @@ const TOOLS: { tool: Tool; label: string; shortcut: string; icon: () => React.Re
   { tool: 'arrow', label: 'Arrow', shortcut: '2', icon: ArrowIcon },
 ]
 
-function shapeIcon(children: React.ReactNode) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="15"
-      height="15"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      aria-hidden="true"
-    >
-      {children}
-    </svg>
-  )
-}
-
-const SHAPE_ICONS: Record<string, React.ReactElement> = {
-  Rectangle: shapeIcon(<rect x="3.5" y="6.5" width="17" height="11" />),
-  Rounded: shapeIcon(<rect x="3.5" y="6.5" width="17" height="11" rx="5.5" />),
-  Diamond: shapeIcon(<path d="M12 3.5 L20.5 12 L12 20.5 L3.5 12 Z" />),
-  Circle: shapeIcon(<circle cx="12" cy="12" r="8.5" />),
-}
-
 const SHAPE_SHORTCUTS = ['3', '4', '5', '6']
 
 // Mermaid's own default node, so the swatch that clears the colour shows what it returns you
@@ -141,6 +120,7 @@ export default function Toolbar({
   file,
   onToolChange,
   shape,
+  nodeShape,
   onPickShape,
   hasNodeSelection,
   color,
@@ -153,6 +133,10 @@ export default function Toolbar({
   onFit,
   onReset,
 }: ToolbarProps) {
+  // A shape button means "the selected node is this" when there is a selection, and "a new node
+  // will be this" when there is not.
+  const current = hasNodeSelection ? nodeShape : tool === 'shape' ? shape : null
+
   return (
     // Every one of these would otherwise reach the canvas behind the buttons: pointer-down
     // starts a pan, click reads as a click on empty space and clears the selection, and
@@ -202,13 +186,13 @@ export default function Toolbar({
 
         <span className="separator" />
 
-        {SHAPES.map((each, position) => (
+        {QUICK_SHAPES.map((each, position) => (
           <button
-            key={each.name}
+            key={each.key}
             type="button"
-            className={tool === 'shape' && shape.name === each.name ? 'tool active' : 'tool'}
+            className={each.key === current?.key ? 'tool active' : 'tool'}
             aria-label={hasNodeSelection ? `Make selection a ${each.name}` : `${each.name} tool`}
-            aria-pressed={tool === 'shape' && shape.name === each.name}
+            aria-pressed={each.key === current?.key}
             title={
               hasNodeSelection
                 ? `Change the selected node to a ${each.name.toLowerCase()}`
@@ -216,10 +200,12 @@ export default function Toolbar({
             }
             onClick={() => onPickShape(each)}
           >
-            {SHAPE_ICONS[each.name]}
+            <ShapeIcon shape={each} />
             <span className="shortcut">{SHAPE_SHORTCUTS[position]}</span>
           </button>
         ))}
+
+        <ShapeMenu current={current} hasNodeSelection={hasNodeSelection} onPick={onPickShape} />
 
         <span className="separator" />
 

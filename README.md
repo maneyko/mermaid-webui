@@ -6,8 +6,9 @@ backend.
 
 **Status: it edits, and it saves.** Click a node, an edge or an edge label to select it,
 double-click to rename it in place, Delete to remove it; drag between nodes to connect them;
-drag out from one to add a new node; pick a shape to restyle what is selected; undo from
-anywhere with cmd+Z. Every change rewrites the source with the smallest possible edit. Your
+drag out from one to add a new node; pick any of mermaid's 53 shapes to restyle what is
+selected; undo from anywhere with cmd+Z. Every change rewrites the source with the smallest
+possible edit. Your
 work survives a refresh, and cmd+S writes it back to a real `.mmd` file — that last part
 needs Chrome or Edge. See [Work items](#work-items).
 
@@ -143,17 +144,19 @@ viable at all; everything before it was chrome.
       is left in it. This is the one edit that keeps its selection, so you can try a colour
       and then another.
 
-Not done yet, roughly in the order I would take them:
+- [x] **16. The full shape library.** All 53 flowchart shapes mermaid 11.17.2 draws, behind a
+      button in the island that expands into a menu grouped Basic / Process / Technical, the
+      way mermaid.ai's is. Only four of them have delimiters; the rest are written as
+      `A@{ shape: cyl, label: "..." }`, which the scanner had to learn to read without taking
+      `shape` and `cyl` for node ids. The shape goes in the declaration rather than on a line
+      of its own — mermaid.ai splits them across two statements, but one declaration per node
+      is what everything else here already assumes, and it makes the shape reversible by
+      replacing the same span. A separate `A@{ shape: ... }` in a file you opened is read
+      correctly and folded back into the declaration the first time you change that node's
+      shape, because mermaid lets one outrank the delimiters and it would otherwise silently
+      win over the shape you picked.
 
-- [ ] **The full shape library.** A control in the island that expands to the whole set, with
-      categories, modelled on mermaid.ai's — theirs is Basic / Process / Technical over 59
-      shapes. The four we have are the ones with classic delimiters; the rest (`cyl`, `h-cyl`,
-      `hex`, `db` and so on) need mermaid 11's `A@{ shape: cyl }` syntax, which the scanner
-      does not understand today and which is the real work here. Worth knowing before
-      starting: mermaid.ai writes the shape as its own statement — `n2["Cylinder"]` on one
-      line and `n2@{ shape: h-cyl}` on another — so *writing* one need not touch the node's
-      declaration at all. Reading them back, and not mistaking `shape` and `hex` for node
-      ids, is what `correlate.ts` has to learn.
+Not done yet, roughly in the order I would take them:
 
 - [ ] **Import and export for browsers without the File System Access API.** A download link
       and a file input, so Firefox and Safari can at least get a diagram in and out. Named
@@ -215,6 +218,10 @@ offering connection points — four points would imply a choice that cannot be e
   refresh you have your text back from autosave but Save asks for a location again.
   `FileSystemFileHandle` can be stored in IndexedDB and re-permissioned, which is the fix if
   this becomes annoying.
+- **Mermaid's shape aliases are not recognised.** Every shape has two or three of them —
+  `db` and `database` for `cyl`, `subroutine` for `fr-rect` — and only the canonical short
+  name is in the list here. A hand-written `A@{ shape: db }` still renders as a cylinder; the
+  picker just shows nothing as current until you pick a shape, which rewrites it to `cyl`.
 - **Deleting an edge does not renumber `linkStyle`.** `linkStyle` addresses edges by index,
   so removing one shifts every later index and the styling lands on the wrong edge. Nothing
   in the canvas writes `linkStyle`, so this only bites a hand-written document.

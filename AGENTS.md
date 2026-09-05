@@ -55,6 +55,7 @@ src/Canvas.tsx          mermaid render, selection, gesture policy
 src/RenameOverlay.tsx   the in-place rename box: its text, and how the edit ends
 src/usePanZoom.ts       the viewport: pan drag, wheel zoom, fit
 src/Toolbar.tsx         the floating islands and the Tool type
+src/ShapeMenu.tsx       the full shape library: its icons, and whether it is open
 src/correlate.ts        source -> node spans, and rendered SVG id -> node id
 src/correlate.test.ts   bun test
 src/edit.ts             minimal rewrites back into the source
@@ -120,9 +121,13 @@ Things the scanner gets right, all covered by `src/correlate.test.ts`:
 - Edge labels (`|Get money|`), comments (`%%`), quoted strings, and keywords are skipped.
 - An unterminated `A[Unclosed` falls back to the bare id rather than swallowing the file.
 
-Known gaps, none currently reachable from the UI: mermaid 11's `A@{ shape: rect }` syntax is
-not understood and leaves stray identifiers in the map, and subgraph ids get collected even
-though subgraphs render as `g.cluster` and so cannot be clicked.
+- Mermaid 11's `A@{ shape: cyl, label: "x" }` is read as a declaration like any other: the
+  span covers the block, and `labelFrom` points at the `label:` value if it has one. `meta` on
+  a `NodeSpan` says which form it is, and exists because a metadata declaration with no
+  `label:` key looks exactly like a bare mention otherwise -- see Shapes.
+
+Known gap, not currently reachable from the UI: subgraph ids get collected even though
+subgraphs render as `g.cluster` and so cannot be clicked.
 
 ### The parser situation
 
@@ -232,12 +237,43 @@ recompute the spans, not carry them across.
 
 ### Shapes
 
-- `SHAPES` in `edit.ts` is the whole vocabulary: rectangle `[]`, rounded `()`, diamond `{}`,
-  circle `(())`. Adding one means adding a delimiter pair there and an icon in `Toolbar.tsx`.
-- The buttons do two jobs. With a node selected they restyle it in place, preserving the
-  label verbatim (an already-quoted `"a|b"` is carried across, not re-quoted). With nothing
-  selected they arm the shape tool, and dragging out from a node to empty canvas creates a
-  new connected node.
+- `SHAPES` in `edit.ts` is mermaid 11.17.2's whole flowchart vocabulary, 53 of them, addressed
+  by mermaid's own short name (`cyl`, `h-cyl`). `QUICK_SHAPES` is the four with delimiters,
+  which is what sits on the toolbar and what the `3`-`6` shortcuts index. The rest live in
+  `ShapeMenu.tsx`, which also holds one hand-drawn icon path per shape.
+- **A shape is written into the declaration, never onto a line of its own.** Four of them have
+  delimiters and the other forty-nine are `A@{ shape: cyl, label: "..." }`, so `declaration()`
+  in `edit.ts` is the one place that knows which form a shape takes. mermaid.ai splits the two
+  -- `n2["Cylinder"]` then `n2@{ shape: h-cyl }` -- and that was rejected: one declaration per
+  node is what the rest of this code already assumes, and keeping it means a shape change
+  replaces exactly one span and is reversible.
+- **A separate `A@{ shape: ... }` outranks the delimiters on the declaration**, whichever order
+  they are in. So `setNodeShape` reduces any other metadata occurrence of the id back to a bare
+  mention. Without that, changing the shape of a node in an imported mermaid.ai file writes the
+  right thing into the declaration and nothing visible happens.
+- **The metadata block is YAML, so its label is always quoted.** An unquoted scalar stops at
+  the first comma: `label: Hello, world` renders as `Hello`, silently. `quoteMeta` is that
+  rule; `#quot;` is the escape in both forms, and a backslash is a parse error.
+- **A metadata declaration with no `label:` key is not a bare mention**, and nothing but the
+  `meta` flag distinguishes them -- both have a null `labelFrom`. Three places turn on it:
+  renaming (the label goes inside the braces), the rescue in `deleteNode`, and the drop rule in
+  `deleteEdge`. Getting it wrong loses the shape rather than erroring.
+- The buttons do two jobs. With a node selected they restyle it in place and show which shape
+  it currently is, from `shapeOf`. With nothing selected they arm the shape tool, and dragging
+  out from a node to empty canvas creates a new connected node.
+- **A shape change re-quotes the label rather than carrying it across as text.** The two forms
+  do not quote the same characters, so a verbatim copy is wrong in both directions. This also
+  fixed a latent bug in the delimiter-only version: `A[a (b) c]` became `A(a (b) c)`.
+- The 53 names are mermaid's own, read out of its bundle rather than the docs:
+
+  ```sh
+  grep -o 'semanticName:"[^"]*",name:"[^"]*",shortName:"[^"]*"' \
+    node_modules/mermaid/dist/chunks/mermaid.esm.min/chunk-*.mjs
+  ```
+
+  That also lists the aliases, which are deliberately not carried here -- see the README's
+  known issues. Every one of the 53 was then rendered in the browser to check mermaid accepts
+  it and to draw the icon from what it actually looks like. Re-do both if mermaid is upgraded.
 - **Dragging out creates a connected node; clicking blank canvas creates a standalone one.**
   Connected nodes land near the release point because their parent anchors them. A standalone
   node is its own dagre component and will render wherever the layout puts it, which is

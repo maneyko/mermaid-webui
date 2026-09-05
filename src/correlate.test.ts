@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { findNodes, findStatements } from './correlate'
+import { findEdgeLabels, findNodes, findStatements } from './correlate'
 
 function spanOf(source: string, id: string): string {
   const node = findNodes(source).get(id)
@@ -140,6 +140,38 @@ test('does not mistake an arrowhead for a node', () => {
   expect([...findNodes('flowchart TD\n  A --x B\n').keys()]).toEqual(['A', 'B'])
   expect([...findNodes('flowchart TD\n  A --o B\n').keys()]).toEqual(['A', 'B'])
   expect([...findNodes('flowchart TD\n  A --> x\n').keys()]).toEqual(['A', 'x'])
+})
+
+// Mermaid 11's shape metadata. The keys inside the block are the trap: read as identifiers,
+// `shape` and `cyl` become nodes that are not in the diagram.
+test('reads a metadata declaration and its label', () => {
+  const source = 'flowchart TD\n  A@{ shape: cyl, label: "Christmas" } --> B\n'
+  expect([...findNodes(source).keys()]).toEqual(['A', 'B'])
+  expect(spanOf(source, 'A')).toBe('A@{ shape: cyl, label: "Christmas" }')
+  expect(labelOf(source, 'A')).toBe('"Christmas"')
+})
+
+test('a metadata block without a label is still a declaration', () => {
+  const source = 'flowchart TD\n  A@{ shape: cyl }\n'
+  expect(spanOf(source, 'A')).toBe('A@{ shape: cyl }')
+  expect(labelOf(source, 'A')).toBeNull()
+  expect(findNodes(source).get('A')?.meta).toBe(true)
+})
+
+test('label may come first in the block, and may be unquoted', () => {
+  expect(labelOf('flowchart TD\n  A@{ label: Christmas, shape: cyl }\n', 'A')).toBe('Christmas')
+  expect(labelOf('flowchart TD\n  A@{ label: Christmas }\n', 'A')).toBe('Christmas')
+})
+
+test('a brace inside a quoted metadata label does not close the block', () => {
+  const source = 'flowchart TD\n  A@{ shape: cyl, label: "a}b" } --> B\n'
+  expect([...findNodes(source).keys()]).toEqual(['A', 'B'])
+  expect(labelOf(source, 'A')).toBe('"a}b"')
+})
+
+test('a pipe inside a metadata label is not an edge label', () => {
+  const source = 'flowchart TD\n  A@{ shape: cyl, label: "a|b" } -->|Real| B\n'
+  expect(findEdgeLabels(source).map((s) => source.slice(s.from, s.to))).toEqual(['Real'])
 })
 
 test('sibling subgraphs are different scopes', () => {
