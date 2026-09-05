@@ -12,6 +12,7 @@ import {
   type Shape,
 } from './edit'
 import { usePanZoom } from './usePanZoom'
+import RenameOverlay, { type Anchor } from './RenameOverlay'
 import Toolbar, { type FileControls, type Tool } from './Toolbar'
 
 // useMaxWidth would make mermaid size the SVG to its container, which fights a viewport that
@@ -23,22 +24,6 @@ mermaid.initialize({
 })
 
 const GRID_SPACING = 20
-// Matches mermaid's default node label size, so the overlay sits at the size of the text
-// it replaces.
-const LABEL_FONT_SIZE = 16
-// Padding, border and room for the caret, so the last character is never against the edge.
-const INPUT_SLACK = 24
-
-let measuringContext: CanvasRenderingContext2D | null | undefined
-
-// The overlay has to be at least as wide as its own text. Sized to the element it covers, a
-// label wider than its shape scrolls under the caret and hides its own beginning.
-function textWidth(text: string, fontSize: number): number {
-  measuringContext ??= document.createElement('canvas').getContext('2d')
-  if (measuringContext == null) return text.length * fontSize * 0.6
-  measuringContext.font = `${fontSize}px system-ui, sans-serif`
-  return measuringContext.measureText(text).width
-}
 
 // mermaid renders into a DOM id it expects to be unused, and a slow render can still be in
 // flight when the next keystroke starts another one.
@@ -133,12 +118,14 @@ export type Renameable = Exclude<EditTarget, { kind: 'edge' }>
 
 interface Editing {
   target: Renameable
-  value: string
-  original: string
-  left: number
-  top: number
-  width: number
-  height: number
+  label: string
+  anchor: Anchor
+}
+
+// Remounts the overlay when the rename moves to something else, so it cannot carry the
+// previous label across.
+function targetKey(target: Renameable): string {
+  return target.kind === 'node' ? `node:${target.nodeId}` : `label:${target.index}`
 }
 
 interface Point {
@@ -190,7 +177,6 @@ export default function Canvas({
   const [hovered, setHovered] = useState<EditTarget | null>(null)
   const [connecting, setConnecting] = useState<Connecting | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const abandoned = useRef(false)
   const frame = useRef<HTMLDivElement>(null)
   const diagram = useRef<HTMLDivElement>(null)
   // A pan or a connect drag ends with a click event we do not want to act on.
@@ -274,12 +260,13 @@ export default function Canvas({
     const frameBounds = frame.current.getBoundingClientRect()
     setEditing({
       target,
-      value: label,
-      original: label,
-      left: bounds.left - frameBounds.left,
-      top: bounds.top - frameBounds.top,
-      width: bounds.width,
-      height: bounds.height,
+      label,
+      anchor: {
+        left: bounds.left - frameBounds.left,
+        top: bounds.top - frameBounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      },
     })
   }
 
@@ -524,42 +511,15 @@ export default function Canvas({
       />
 
       {editing !== null && (
-        <input
-          className="rename"
-          autoFocus
-          value={editing.value}
-          style={(() => {
-            const fontSize = LABEL_FONT_SIZE * view.scale
-            const width = Math.max(editing.width, textWidth(editing.value, fontSize) + INPUT_SLACK)
-            return {
-              // Grows from the centre, so the overlay stays over what it is editing.
-              left: editing.left - (width - editing.width) / 2,
-              top: editing.top,
-              width,
-              height: editing.height,
-              fontSize: `${fontSize}px`,
-            }
-          })()}
-          onChange={(event) => setEditing({ ...editing, value: event.target.value })}
-          // Clicking inside the box must not reach the canvas, which would read it as a click
-          // on whatever sits behind and immediately reopen the editor.
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => event.stopPropagation()}
-          // Enter and Escape both blur, so committing has exactly one path.
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur()
-            if (event.key === 'Escape') {
-              abandoned.current = true
-              event.currentTarget.blur()
-            }
-          }}
-          onBlur={() => {
-            const cancelled = abandoned.current
-            abandoned.current = false
-            setEditing(null)
-            if (cancelled || editing.value === editing.original) return
-            if (editing.target.kind === 'node') onRename(editing.target.nodeId, editing.value)
-            else onRenameEdge(editing.target.index, editing.value)
+        <RenameOverlay
+          key={targetKey(editing.target)}
+          label={editing.label}
+          anchor={editing.anchor}
+          scale={view.scale}
+          onClose={() => setEditing(null)}
+          onCommit={(next) => {
+            if (editing.target.kind === 'node') onRename(editing.target.nodeId, next)
+            else onRenameEdge(editing.target.index, next)
           }}
         />
       )}

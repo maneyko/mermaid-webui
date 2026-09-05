@@ -51,7 +51,8 @@ src/main.tsx            React root
 src/App.tsx             owns the source string and which file it came from
 src/CodePane.tsx        CodeMirror 6 editor, controlled
 src/storage.ts          autosave, and opening and saving real .mmd files
-src/Canvas.tsx          mermaid render, selection, renaming, gesture policy
+src/Canvas.tsx          mermaid render, selection, gesture policy
+src/RenameOverlay.tsx   the in-place rename box: its text, and how the edit ends
 src/usePanZoom.ts       the viewport: pan drag, wheel zoom, fit
 src/Toolbar.tsx         the floating islands and the Tool type
 src/correlate.ts        source -> node spans, and rendered SVG id -> node id
@@ -276,6 +277,17 @@ recompute the spans, not carry them across.
   selection, hover and the rename overlay are all keyed on. A node selection additionally
   drives the shape buttons and delete, which is why `Canvas` narrows it to `selectedNode`;
   an edge label is selectable but is not a node and must not reach those.
+- **The overlay lives in `src/RenameOverlay.tsx` and owns the edit, not just the box.** It
+  holds the text being typed and decides how the edit ends; `Canvas` supplies only what is
+  being renamed, the rectangle to sit over, and the two ways out. The split is worth keeping
+  in that direction -- the value churn, the width measuring and the commit rules are the
+  fiddly parts, and none of them are gesture policy.
+- **Mounting it opens the box and unmounting takes it away.** There is no close method:
+  `Canvas` clearing `editing` is the close, which is why `onClose` fires before `onCommit`.
+- **It is keyed on the target.** Without that, reopening on something else while the box is
+  still mounted would keep the previous label in its internal state. The unmount usually
+  happens anyway, between the blur and the second click; the key is what makes that not
+  matter.
 - The overlay stops `click` as well as `pointerdown`. Without that, clicking inside the box
   reaches the canvas as a click on whatever sits behind it and reopens the editor.
 - **`CLICK_SLOP` is 10px, and it is not arbitrary.** Every press begins a pan, so a press
@@ -420,6 +432,18 @@ is what capture does to a real click, and code that reads `event.target` fails i
 any change to a gesture, drive it once with the real pointer (`left_click`, `left_click_drag`)
 including a few pixels of drift, because that is the case that actually breaks.
 
+- **The automation's Escape never reaches the page.** Pressing it through the browser tool
+  produces no `keydown` at all, only a `focusout` on whatever had focus. So it looks like it
+  cancels a rename when in fact it blurs it, and blurring *commits* -- which reads as
+  "Escape is broken" the moment there is unsaved text in the box. Test the cancel path by
+  dispatching `new KeyboardEvent('keydown', {key: 'Escape', bubbles: true})` at the input.
+  Setting a controlled input's value from outside React needs the native setter
+  (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set`) followed by an
+  `input` event, or React will not see it.
+- **The first synthetic click after a navigate or reload is frequently dropped**, and so are
+  clicks whose coordinates came from a screenshot taken before the window resized. Assert the
+  intermediate state -- that the node really did get selected -- before concluding anything
+  about what the next click did.
 - **Double-click hit-tests coordinates, not `event.target`.** `dblclick` retargets to the
   common ancestor of its two clicks, which for a mermaid node is the canvas itself, so the
   handler uses `document.elementFromPoint` instead.
