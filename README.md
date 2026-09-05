@@ -135,7 +135,33 @@ viable at all; everything before it was chrome.
       do nothing, because there is no equivalent API to fall back to. Autosave works
       everywhere.
 
+- [x] **15. Colour a node.** A row of swatches in the island recolours the selected node,
+      writing `style A fill:...,stroke:...`. Fill and stroke together, never fill alone:
+      mermaid's default node stroke is purple and stays purple over a red fill. Anything else
+      the statement said about the node is carried across, so a hand-written `stroke-width`
+      survives a recolour, and clearing the colour removes the statement only if nothing else
+      is left in it. This is the one edit that keeps its selection, so you can try a colour
+      and then another.
+
 Not done yet, roughly in the order I would take them:
+
+- [ ] **The full shape library.** A control in the island that expands to the whole set, with
+      categories, modelled on mermaid.ai's — theirs is Basic / Process / Technical over 59
+      shapes. The four we have are the ones with classic delimiters; the rest (`cyl`, `h-cyl`,
+      `hex`, `db` and so on) need mermaid 11's `A@{ shape: cyl }` syntax, which the scanner
+      does not understand today and which is the real work here. Worth knowing before
+      starting: mermaid.ai writes the shape as its own statement — `n2["Cylinder"]` on one
+      line and `n2@{ shape: h-cyl}` on another — so *writing* one need not touch the node's
+      declaration at all. Reading them back, and not mistaking `shape` and `hex` for node
+      ids, is what `correlate.ts` has to learn.
+
+- [ ] **Import and export for browsers without the File System Access API.** A download link
+      and a file input, so Firefox and Safari can at least get a diagram in and out. Named
+      Import/Export rather than Open/Save on purpose: there is no writing back to the file you
+      opened, so every export is a fresh copy in the downloads folder. Deliberately a separate,
+      plainer pair of controls rather than a fallback wired behind the same buttons — the two
+      have different semantics, and hiding that behind one label is how the untested half
+      ends up lying to you.
 
 - [ ] **A library of past diagrams, if it is still wanted afterwards.** A panel listing
       what you have worked on. Deliberately last, because once files work the filesystem is
@@ -175,6 +201,10 @@ offering connection points — four points would imply a choice that cannot be e
 - **Deleting a node listed in a shared `class` line takes the whole line.** `class A,B big`
   names two nodes; deleting A removes the statement, so B quietly loses its class. Splitting
   the id list would fix it. Not reachable from the canvas, since nothing writes `class`.
+- **A coloured node's selection ring is its own colour, not the usual purple.** `style` is
+  compiled to an inline `stroke:... !important`, and an inline important declaration outranks
+  any stylesheet, so the ring cannot recolour it. Selecting still thickens the stroke to 3px,
+  which is the signal that survives.
 - **Undo restores text, never the file you were in.** The document lives in CodeMirror's
   history; which file it came from is React state and is not in that history. So cmd+Z after
   New brings the diagram back but leaves you on `Untitled`, and Save will ask where to put it.

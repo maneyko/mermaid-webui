@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import { nodeIdFromElement } from './correlate'
-import { edgeCount, edgeLabelCount, edgeLabelOf, labelOf, SHAPES, type Shape } from './edit'
+import {
+  colorOf,
+  edgeCount,
+  edgeLabelCount,
+  edgeLabelOf,
+  labelOf,
+  SHAPES,
+  type NodeColor,
+  type Shape,
+} from './edit'
 import { usePanZoom } from './usePanZoom'
 import Toolbar, { type FileControls, type Tool } from './Toolbar'
 
@@ -152,6 +161,7 @@ interface CanvasProps {
   onRenameEdge: (index: number, label: string) => void
   onConnect: (fromId: string, toId: string) => void
   onSetShape: (nodeId: string, shape: Shape) => void
+  onSetColor: (nodeId: string, color: NodeColor | null) => void
   onAddNode: (fromId: string, shape: Shape) => string
   onAddStandalone: (shape: Shape) => string
   onDelete: (target: EditTarget) => void
@@ -166,6 +176,7 @@ export default function Canvas({
   onRenameEdge,
   onConnect,
   onSetShape,
+  onSetColor,
   onAddNode,
   onAddStandalone,
   onDelete,
@@ -497,6 +508,10 @@ export default function Canvas({
         shape={shape}
         onPickShape={pickShape}
         hasNodeSelection={selectedNode !== null}
+        color={selectedNode === null ? null : colorOf(source, selectedNode)}
+        onPickColor={(picked) => {
+          if (selectedNode !== null) onSetColor(selectedNode, picked)
+        }}
         canDelete={selected !== null}
         onDelete={() => {
           if (selected !== null) onDelete(selected)

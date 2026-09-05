@@ -2,7 +2,10 @@ import { expect, test } from 'bun:test'
 import {
   addConnectedNode,
   addStandaloneNode,
+  colorOf,
+  COLORS,
   connectNodes,
+  setNodeColor,
   deleteEdge,
   deleteEdgeLabel,
   deleteNode,
@@ -244,6 +247,70 @@ test('a label with an unbalanced delimiter round-trips', () => {
     expect(labelOf(once, 'A')).toBe(awkward)
     expect(renameLabel(once, 'A', 'Plain')).toContain('A[Plain]')
   }
+})
+
+const color = (name: string) => {
+  const found = COLORS.find((each) => each.name === name)
+  if (found === undefined) throw new Error(`no color ${name}`)
+  return found
+}
+
+test('colouring a node appends one style statement', () => {
+  expect(setNodeColor(SOURCE, 'A', color('Red'))).toBe(`${SOURCE}  style A fill:#ffc9c9,stroke:#e03131\n`)
+})
+
+test('a second colour rewrites the statement rather than adding another', () => {
+  const once = setNodeColor(SOURCE, 'A', color('Red'))
+  const twice = setNodeColor(once, 'A', color('Blue'))
+  expect(twice).toBe(`${SOURCE}  style A fill:#a5d8ff,stroke:#1971c2\n`)
+})
+
+test('the colour reads back, and clearing it removes the line', () => {
+  const red = setNodeColor(SOURCE, 'A', color('Red'))
+  expect(colorOf(red, 'A')?.name).toBe('Red')
+  expect(colorOf(red, 'B')).toBeNull()
+  expect(setNodeColor(red, 'A', null)).toBe(SOURCE)
+})
+
+// A style statement is not only ours to write, so recolouring must not throw away what else
+// it says about the node.
+test('other style declarations survive a recolour', () => {
+  const source = 'flowchart TD\n  A --> B\n  style A stroke-width:4px,fill:#f9f\n'
+  expect(setNodeColor(source, 'A', color('Green'))).toBe(
+    'flowchart TD\n  A --> B\n  style A fill:#b2f2bb,stroke:#2f9e44,stroke-width:4px\n',
+  )
+})
+
+test('clearing the colour keeps a statement that still says something else', () => {
+  const source = 'flowchart TD\n  A --> B\n  style A fill:#f9f,stroke-width:4px\n'
+  expect(setNodeColor(source, 'A', null)).toBe(
+    'flowchart TD\n  A --> B\n  style A stroke-width:4px\n',
+  )
+})
+
+test('colouring leaves every other node and its style alone', () => {
+  const source = 'flowchart TD\n  A --> B\n  style B fill:#f9f\n'
+  expect(setNodeColor(source, 'A', color('Blue'))).toBe(
+    'flowchart TD\n  A --> B\n  style B fill:#f9f\n  style A fill:#a5d8ff,stroke:#1971c2\n',
+  )
+})
+
+// `style X` on an unknown id compiles to an addVertex, so this would draw a node that is not
+// in the diagram.
+test('colouring an unknown node leaves the source untouched', () => {
+  expect(setNodeColor(SOURCE, 'ZZZ', color('Red'))).toBe(SOURCE)
+})
+
+test('a coloured node still deletes cleanly, style line and all', () => {
+  const source = setNodeColor('flowchart TD\n  A --> B\n', 'B', color('Red'))
+  expect(deleteNode(source, 'B')).toBe('flowchart TD\n  A\n')
+})
+
+test('what colouring writes is readable back by the scanner', () => {
+  const red = setNodeColor(SOURCE, 'C', color('Red'))
+  expect(labelOf(red, 'C')).toBe('Let me think')
+  expect(edgeCount(red)).toBe(2)
+  expect(renameLabel(red, 'C', 'Decide')).toContain('C{Decide}')
 })
 
 const HUB = `flowchart TD

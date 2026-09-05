@@ -296,6 +296,22 @@ body {
   cursor: default;
 }
 
+.island .swatch {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  margin: 0 1px;
+  padding: 0;
+  border: 1.5px solid;
+  border-radius: 4px;
+}
+
+/* Outline rather than a border swap, so the swatch does not change size when it is picked. */
+.island .swatch.active {
+  outline: 2px solid var(--select);
+  outline-offset: 1.5px;
+}
+
 .island .zoom {
   min-width: 44px;
   color: var(--muted);

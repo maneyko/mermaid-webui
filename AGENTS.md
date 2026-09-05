@@ -156,6 +156,11 @@ target for the Langium migration though, so this may change.
   compares against the current doc and no-ops when they match, so typing does not echo. The
   external-write path is what canvas edits use, and it was unexercised at first because
   nothing writes to `source` except the editor itself.
+- **That external write must not report itself back through `onChange`.** It used to, and the
+  round trip -- App writes the source in, CodeMirror tells App the document changed, App
+  handles it as if the user had typed -- is what made it impossible for any canvas edit to
+  keep the node selected. The `echoing` ref covers exactly that one dispatch, which is safe
+  because `dispatch` is synchronous. Undo and typing are user transactions and still report.
 - Enter inherits the previous line's indentation because a `StreamLanguage` supplies no
   indent rules. Mermaid ignores leading whitespace, so this is cosmetic. If it becomes
   annoying, an `indentService` that outdents `end` and indents after `subgraph` is the fix.
@@ -355,6 +360,22 @@ The UI half has two traps worth keeping:
   text box silently rewriting the whole diagram.
 - While the editor *does* have focus the listener returns without preventing anything, so
   CodeMirror handles it once. Check this after touching it -- the failure is a double undo.
+
+### Colour
+
+- **`style X fill:...` compiles to an inline style with `!important` on the shape element.**
+  That is why the palette sets `stroke` as well as `fill`: mermaid's default node stroke is
+  purple and stays purple over a red fill, which looks like a bug. It is also why a coloured
+  node's selection ring keeps the node's own colour -- an inline important declaration beats
+  any stylesheet, `!important` or not. The 3px thickening still lands, and that is the signal.
+- **A style statement is not only ours to write.** `setNodeColor` keeps every declaration it
+  does not own, so a hand-written `stroke-width:4px` survives a recolour, and clearing the
+  colour removes the statement only when nothing else is left in it.
+- **Colouring an unknown id would draw a node.** `style X` is an `addVertex`, the same fact
+  that makes deletion remove style lines, so `setNodeColor` declines an id it cannot find.
+- **This is the one edit that keeps its selection**, because trying a colour and then another
+  is the whole gesture. It recomputes the reveal span against the rewritten source rather
+  than carrying the old one, which is the rule the Selection section sets out.
 
 ### Files and autosave
 

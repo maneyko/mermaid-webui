@@ -19,6 +19,7 @@ import {
   deleteNode,
   renameEdgeLabel,
   renameLabel,
+  setNodeColor,
   setNodeShape,
 } from './edit'
 
@@ -96,19 +97,21 @@ export default function App() {
 
   // A node reveals its whole declaration, an edge label the text between its pipes, and an
   // edge the pair of nodes it joins -- which for `A --> B --> C` is the half you clicked.
-  const spanOf = (target: EditTarget): Range | null => {
-    if (target.kind === 'edgeLabel') return findEdgeLabels(source)[target.index] ?? null
+  // Takes the text to measure against rather than closing over it, because recolouring keeps
+  // the selection and has to recompute the span against the rewritten source.
+  const spanOf = (target: EditTarget, text: string): Range | null => {
+    if (target.kind === 'edgeLabel') return findEdgeLabels(text)[target.index] ?? null
     if (target.kind === 'edge') {
-      const edge = findEdges(source)[target.index]
+      const edge = findEdges(text)[target.index]
       return edge === undefined ? null : { from: edge.from, to: edge.to }
     }
-    const node = findNodes(source).get(target.nodeId)
+    const node = findNodes(text).get(target.nodeId)
     return node === undefined ? null : { from: node.from, to: node.to }
   }
 
   const select = (target: EditTarget | null) => {
     setSelected(target)
-    setReveal(target === null ? null : spanOf(target))
+    setReveal(target === null ? null : spanOf(target, source))
   }
 
   return (
@@ -156,6 +159,13 @@ export default function App() {
           setSource(setNodeShape(source, nodeId, shape))
           setSelected(null)
           setReveal(null)
+        }}
+        // The one edit that keeps its selection: trying a colour and then another is the
+        // whole gesture, so the span is recomputed against the new text instead of dropped.
+        onSetColor={(nodeId, color) => {
+          const next = setNodeColor(source, nodeId, color)
+          setSource(next)
+          setReveal(spanOf({ kind: 'node', nodeId }, next))
         }}
         onAddNode={(fromId, shape) => {
           const added = addConnectedNode(source, fromId, shape)

@@ -21,6 +21,10 @@ export default function CodePane({ source, onChange, reveal }: CodePaneProps) {
   const view = useRef<EditorView | null>(null)
   const latestOnChange = useRef(onChange)
   latestOnChange.current = onChange
+  // Set while writing a canvas edit in, so the change does not echo back out as if the user
+  // had typed it. The caller already knows -- it is the one that asked for it -- and the echo
+  // is what made it impossible for an edit to keep the node selected.
+  const echoing = useRef(false)
 
   // Built once. Recreating the view whenever `source` changes would destroy the cursor and
   // undo history on every keystroke, so the initial doc is read here and never again.
@@ -42,7 +46,9 @@ export default function CodePane({ source, onChange, reveal }: CodePaneProps) {
           mermaidLanguage,
           EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) latestOnChange.current(update.state.doc.toString())
+            if (update.docChanged && !echoing.current) {
+              latestOnChange.current(update.state.doc.toString())
+            }
           }),
         ],
       }),
@@ -93,7 +99,10 @@ export default function CodePane({ source, onChange, reveal }: CodePaneProps) {
     const current = editor.state.doc.toString()
     if (current === source) return
 
+    // dispatch is synchronous, so the flag covers exactly this transaction.
+    echoing.current = true
     editor.dispatch({ changes: { from: 0, to: current.length, insert: source } })
+    echoing.current = false
   }, [source])
 
   // Selecting the range is the highlight: it uses CodeMirror's own selection rendering rather

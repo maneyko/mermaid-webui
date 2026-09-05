@@ -135,6 +135,80 @@ export function setNodeShape(source: string, nodeId: string, shape: Shape): stri
   return `${source.slice(0, node.from)}${nodeId}${shape.open}${label}${shape.close}${source.slice(node.to)}`
 }
 
+export interface NodeColor {
+  name: string
+  fill: string
+  stroke: string
+}
+
+// Fill and stroke together, never fill alone: mermaid's default node stroke is purple, and it
+// stays purple over a red fill unless the style statement replaces it too.
+export const COLORS: NodeColor[] = [
+  { name: 'Grey', fill: '#e9ecef', stroke: '#868e96' },
+  { name: 'Red', fill: '#ffc9c9', stroke: '#e03131' },
+  { name: 'Orange', fill: '#ffd8a8', stroke: '#f08c00' },
+  { name: 'Green', fill: '#b2f2bb', stroke: '#2f9e44' },
+  { name: 'Blue', fill: '#a5d8ff', stroke: '#1971c2' },
+  { name: 'Purple', fill: '#d0bfff', stroke: '#6741d9' },
+]
+
+// `style A fill:...` is one statement per node, and the id is the first thing in it.
+function styleStatement(source: string, nodeId: string): Statement | undefined {
+  return findStatements(source).find(
+    (statement) => statement.keyword === 'style' && statement.nodes[0]?.id === nodeId,
+  )
+}
+
+function declarationsOf(source: string, statement: Statement): string {
+  const id = statement.nodes[0] as NodeSpan
+  return source.slice(id.to, statement.to)
+}
+
+const COLOR_PROPERTIES = new Set(['fill', 'stroke'])
+
+// Everything the palette does not own is carried across, so a hand-written `stroke-width:4px`
+// survives being recoloured.
+function withoutColor(declarations: string): string[] {
+  return declarations
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part !== '' && !COLOR_PROPERTIES.has(part.split(':')[0]?.trim() ?? ''))
+}
+
+export function colorOf(source: string, nodeId: string): NodeColor | null {
+  const statement = styleStatement(source, nodeId)
+  if (statement === undefined) return null
+  const fill = /(?:^|,)\s*fill\s*:\s*([^,]+)/.exec(declarationsOf(source, statement))?.[1]?.trim()
+  return COLORS.find((color) => color.fill === fill) ?? null
+}
+
+export function setNodeColor(source: string, nodeId: string, color: NodeColor | null): string {
+  // `style X` on an unknown id compiles to an addVertex, so this would invent a blank node.
+  if (!findNodes(source).has(nodeId)) return source
+
+  const statement = styleStatement(source, nodeId)
+
+  if (statement === undefined) {
+    if (color === null) return source
+    const body = source.endsWith('\n') || source === '' ? source : `${source}\n`
+    const indent = trailingIndent(source)
+    return `${body}${indent}style ${nodeId} fill:${color.fill},stroke:${color.stroke}\n`
+  }
+
+  const kept = withoutColor(declarationsOf(source, statement))
+  const applied = color === null ? [] : [`fill:${color.fill}`, `stroke:${color.stroke}`]
+  const declarations = [...applied, ...kept]
+
+  // Nothing left to say about the node, so the statement goes rather than sitting there empty.
+  if (declarations.length === 0) {
+    const span = removalSpan(source, statement)
+    return source.slice(0, span.from) + source.slice(span.to)
+  }
+
+  const rewritten = `style ${nodeId} ${declarations.join(',')}`
+  return source.slice(0, statement.from) + rewritten + source.slice(statement.to)
+}
+
 export function connectNodes(source: string, fromId: string, toId: string): string {
   const body = source.endsWith('\n') || source === '' ? source : `${source}\n`
   return `${body}${trailingIndent(source)}${fromId} --> ${toId}\n`

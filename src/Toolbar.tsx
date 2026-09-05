@@ -1,4 +1,4 @@
-import { SHAPES, type Shape } from './edit'
+import { COLORS, SHAPES, type NodeColor, type Shape } from './edit'
 
 export type Tool = 'select' | 'hand' | 'arrow' | 'shape'
 
@@ -18,6 +18,8 @@ interface ToolbarProps {
   shape: Shape
   onPickShape: (shape: Shape) => void
   hasNodeSelection: boolean
+  color: NodeColor | null
+  onPickColor: (color: NodeColor | null) => void
   canDelete: boolean
   onDelete: () => void
   scale: number
@@ -130,6 +132,10 @@ const SHAPE_ICONS: Record<string, React.ReactElement> = {
 
 const SHAPE_SHORTCUTS = ['3', '4', '5', '6']
 
+// Mermaid's own default node, so the swatch that clears the colour shows what it returns you
+// to rather than being an empty hole in the row.
+const DEFAULT_SWATCH = { name: 'Default', fill: '#ececff', stroke: '#9370db' }
+
 export default function Toolbar({
   tool,
   file,
@@ -137,6 +143,8 @@ export default function Toolbar({
   shape,
   onPickShape,
   hasNodeSelection,
+  color,
+  onPickColor,
   canDelete,
   onDelete,
   scale,
@@ -212,6 +220,30 @@ export default function Toolbar({
             <span className="shortcut">{SHAPE_SHORTCUTS[position]}</span>
           </button>
         ))}
+
+        <span className="separator" />
+
+        {[null, ...COLORS].map((each) => {
+          const swatch = each ?? DEFAULT_SWATCH
+          const active = hasNodeSelection && each?.name === color?.name
+          return (
+            <button
+              key={swatch.name}
+              type="button"
+              className={active ? 'swatch active' : 'swatch'}
+              disabled={!hasNodeSelection}
+              aria-label={`${swatch.name} node`}
+              aria-pressed={active}
+              title={
+                each === null
+                  ? 'Clear the colour of the selected node'
+                  : `Colour the selected node ${swatch.name.toLowerCase()}`
+              }
+              style={{ background: swatch.fill, borderColor: swatch.stroke }}
+              onClick={() => onPickColor(each)}
+            />
+          )
+        })}
 
         <span className="separator" />
 
