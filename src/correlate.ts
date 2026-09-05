@@ -136,6 +136,75 @@ export function findNodes(source: string): Map<string, NodeSpan> {
   return declarations
 }
 
+export interface Span {
+  from: number
+  to: number
+}
+
+// The closing `|` of an edge label, skipping quoted stretches so `|"yes|no"|` -- which we
+// emit ourselves for a label containing a pipe -- does not terminate at the inner one.
+// Returns -1 when the label does not close on its line, which makes the `|` ordinary text.
+function closingPipe(source: string, index: number): number {
+  for (let cursor = index + 1; cursor < source.length; cursor += 1) {
+    const character = source[cursor]
+    if (character === '\n') return -1
+    if (character === '"') {
+      cursor = skipDelimited(source, cursor, '"') - 1
+      continue
+    }
+    if (character === '|') return cursor
+  }
+  return -1
+}
+
+// The text inside each `|...|` edge label, in declaration order. Node shapes and quoted
+// strings are skipped so a pipe inside a node label -- `A["a|b"]` -- is not mistaken for a
+// delimiter. Deliberately does not enumerate edges: rendered edge labels carry no identity of
+// any kind, so the only usable key is position, and callers pair the k-th non-empty rendered
+// label with the k-th span here.
+export function findEdgeLabels(source: string): Span[] {
+  const spans: Span[] = []
+  let index = 0
+
+  while (index < source.length) {
+    if (source.startsWith('%%', index)) {
+      index = skipToNewline(source, index)
+      continue
+    }
+
+    const character = source[index]
+
+    if (character === '"') {
+      index = skipDelimited(source, index, '"')
+      continue
+    }
+
+    if (character === '|') {
+      const closing = closingPipe(source, index)
+      if (closing === -1) {
+        index += 1
+        continue
+      }
+      spans.push({ from: index + 1, to: closing })
+      index = closing + 1
+      continue
+    }
+
+    const identifier = IDENTIFIER.exec(source.slice(index))
+    if (identifier === null) {
+      index += 1
+      continue
+    }
+
+    const idEnd = index + identifier[0].length
+    const opener = source[idEnd]
+    const closer = opener === undefined ? undefined : SHAPE_CLOSERS[opener]
+    index = closer === undefined || opener === undefined ? idEnd : (skipShape(source, idEnd, opener, closer) ?? idEnd)
+  }
+
+  return spans
+}
+
 // Mermaid stamps rendered nodes with `<renderId>-flowchart-<nodeId>-<n>`, where `<n>` is an
 // internal entity counter. Greedy matching leaves hyphenated ids like `node-1` intact.
 const RENDERED_NODE_ID = /^mermaid-\d+-flowchart-(.+)-\d+$/

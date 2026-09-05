@@ -232,13 +232,32 @@ expresses the change, so every byte outside it comes back identical.
   `" [ ] { } ( ) | < >`, or with leading or trailing spaces, or empty, is wrapped in double
   quotes with any `"` escaped as `#quot;`. `quoteLabel` and `unquoteLabel` are inverses and
   there is a round-trip test over the awkward cases; keep it that way.
-- **We must be able to re-read what we write.** This bit us once: `A["Buy [things"]` is
-  valid mermaid and we emit it, but the scanner counted the unbalanced `[` and never closed
-  the shape, so the node degraded to a bare id and a *second* rename appended a second shape
-  instead of replacing the label. `skipShape` now skips quoted strings. Any new emitter needs
-  the same check — write a value, read it back, write again.
+- **We must be able to re-read what we write.** This is the most productive check in the
+  codebase. It has caught three separate bugs, each time because quoting introduced a
+  delimiter that some reader then counted:
+  - `A["Buy [things"]` — `skipShape` counted the unbalanced `[` and never closed the shape,
+    so the node degraded to a bare id and a second rename appended a second shape.
+  - `|"yes|no"|` — `findEdgeLabels` ended the span at the pipe inside the quotes.
+  - the same `|"yes|no"|` — the CodeMirror tokenizer closed the edge label early and
+    mis-coloured every line after it.
+
+  All three are fixed by skipping quoted stretches. Any new emitter or reader needs the same
+  check: **write a value, read it back, write again** — and look at the highlighting, not
+  just the data.
 - **Renaming a bare node gives it a shape** (`B` becomes `B[Label]`) at the declaration only,
   leaving every other mention of the id alone.
+- **Edge labels are addressed by position, because they have no identity.** A rendered
+  `g.edgeLabel` carries no id and no data attribute of any kind. What saves us is that
+  `g.edgeLabels` children and `g.edgePaths` children are both emitted in declaration order,
+  so the k-th non-empty rendered label is the k-th `|...|` in the source. Do not try to use
+  the number in an edge path's `data-id`: a second `B --> C` came out as `L_B_C_2`, so it is
+  an internal counter, not a per-pair index.
+- That positional mapping is only sound while both sequences have the same length, so
+  `edgeLabelCount` is compared against the rendered count and the edit is declined on a
+  mismatch. The known trigger is the `A -- text --> B` inline label form, which the scanner
+  does not understand; declining beats renaming a different edge.
+- Only labelled edges are reachable: an unlabelled edge still renders a `g.edgeLabel`, but an
+  empty one has no area to double-click.
 
 ### Rendering
 

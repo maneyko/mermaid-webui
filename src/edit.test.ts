@@ -1,5 +1,14 @@
 import { expect, test } from 'bun:test'
-import { connectNodes, labelOf, quoteLabel, renameLabel, unquoteLabel } from './edit'
+import {
+  connectNodes,
+  edgeLabelCount,
+  edgeLabelOf,
+  labelOf,
+  quoteLabel,
+  renameEdgeLabel,
+  renameLabel,
+  unquoteLabel,
+} from './edit'
 
 const SOURCE = `flowchart TD
   A[Christmas] -->|Get money| B(Go shopping)
@@ -80,6 +89,55 @@ test('an appended connection is readable by the scanner', () => {
   const next = connectNodes(SOURCE, 'B', 'C')
   expect(labelOf(next, 'B')).toBe('Go shopping')
   expect(labelOf(next, 'C')).toBe('Let me think')
+})
+
+const LABELLED = `flowchart TD
+  A[Christmas] -->|Get money| B(Go shopping)
+  B --> C{Let me think}
+  C -->|One| D[Laptop]
+  C -->|Three| F[Car]
+`
+
+test('edge labels are found in declaration order, skipping unlabelled edges', () => {
+  expect(edgeLabelCount(LABELLED)).toBe(3)
+  expect([0, 1, 2].map((i) => edgeLabelOf(LABELLED, i))).toEqual(['Get money', 'One', 'Three'])
+})
+
+test('renaming an edge label leaves the rest of the line byte-identical', () => {
+  expect(renameEdgeLabel(LABELLED, 0, 'Find cash')).toBe(`flowchart TD
+  A[Christmas] -->|Find cash| B(Go shopping)
+  B --> C{Let me think}
+  C -->|One| D[Laptop]
+  C -->|Three| F[Car]
+`)
+})
+
+test('renaming edge label 1 does not touch edge label 0 or 2', () => {
+  const next = renameEdgeLabel(LABELLED, 1, 'First')
+  expect([0, 1, 2].map((i) => edgeLabelOf(next, i))).toEqual(['Get money', 'First', 'Three'])
+})
+
+test('a pipe inside a node label is not mistaken for an edge label', () => {
+  const source = 'flowchart TD\n  A["a|b"] -->|Real| B\n'
+  expect(edgeLabelCount(source)).toBe(1)
+  expect(edgeLabelOf(source, 0)).toBe('Real')
+})
+
+test('an edge label containing a pipe is quoted and round-trips', () => {
+  const next = renameEdgeLabel(LABELLED, 0, 'yes|no')
+  expect(next).toContain('|"yes|no"|')
+  expect(edgeLabelOf(next, 0)).toBe('yes|no')
+  expect(edgeLabelCount(next)).toBe(3)
+})
+
+test('edge labels in comments are ignored', () => {
+  const source = 'flowchart TD\n  %% A -->|Ghost| B\n  A -->|Real| B\n'
+  expect(edgeLabelCount(source)).toBe(1)
+  expect(edgeLabelOf(source, 0)).toBe('Real')
+})
+
+test('an out-of-range edge index leaves the source untouched', () => {
+  expect(renameEdgeLabel(LABELLED, 9, 'nope')).toBe(LABELLED)
 })
 
 test('an unknown node leaves the source untouched', () => {

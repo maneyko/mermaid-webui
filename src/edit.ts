@@ -2,7 +2,7 @@
 // the smallest possible edit applied: byte ranges outside the span being changed must come
 // back identical, because the user hand-edits this text and keeps it in git.
 
-import { findNodes } from './correlate'
+import { findEdgeLabels, findNodes } from './correlate'
 
 // Anything that would terminate a shape early, or that mermaid reads as syntax inside one.
 const NEEDS_QUOTING = /["[\]{}()|<>]/
@@ -23,6 +23,25 @@ export function labelOf(source: string, nodeId: string): string {
   // A node with no label renders as its own id, so that is what is on screen to edit.
   if (node.labelFrom === null || node.labelTo === null) return nodeId
   return unquoteLabel(source.slice(node.labelFrom, node.labelTo))
+}
+
+export function edgeLabelOf(source: string, index: number): string {
+  const span = findEdgeLabels(source)[index]
+  return span === undefined ? '' : unquoteLabel(source.slice(span.from, span.to))
+}
+
+export function renameEdgeLabel(source: string, index: number, label: string): string {
+  const span = findEdgeLabels(source)[index]
+  if (span === undefined) return source
+  return source.slice(0, span.from) + quoteLabel(label) + source.slice(span.to)
+}
+
+// Rendered edge labels are matched to source spans by position, so that is only safe while
+// both sequences have the same length. Anything the scanner does not understand -- the
+// `A -- text --> B` inline form, most likely -- shows up here as a mismatch, and the caller
+// declines to edit rather than renaming the wrong edge.
+export function edgeLabelCount(source: string): number {
+  return findEdgeLabels(source).length
 }
 
 const DEFAULT_INDENT = '  '

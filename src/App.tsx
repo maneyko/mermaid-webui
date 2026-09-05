@@ -2,7 +2,7 @@ import { useState } from 'react'
 import CodePane, { type Range } from './CodePane'
 import Canvas from './Canvas'
 import { findNodes } from './correlate'
-import { connectNodes, renameLabel } from './edit'
+import { connectNodes, renameEdgeLabel, renameLabel } from './edit'
 
 const INITIAL_SOURCE = `flowchart TD
   A[Christmas] -->|Get money| B(Go shopping)
@@ -47,6 +47,11 @@ export default function App() {
         onRename={(nodeId, label) => {
           // The rewritten text moves every span after the edit, so the old ones are dead.
           setSource(renameLabel(source, nodeId, label))
+          setSelected(null)
+          setReveal(null)
+        }}
+        onRenameEdge={(index, label) => {
+          setSource(renameEdgeLabel(source, index, label))
           setSelected(null)
           setReveal(null)
         }}

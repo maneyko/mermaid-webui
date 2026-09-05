@@ -149,6 +149,8 @@ body {
 .rename {
   position: absolute;
   z-index: 1;
+  /* Edge labels can be a few characters wide, which is too small to edit in. */
+  min-width: 80px;
   padding: 0 6px;
   border: 2px solid var(--select);
   border-radius: 4px;

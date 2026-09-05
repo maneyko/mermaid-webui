@@ -73,10 +73,10 @@ Worth reaching early rather than late.
       editor selects the text that declared it. Mermaid's flowchart parser keeps no source
       positions, so `src/correlate.ts` recovers the spans by scanning the source directly.
       It is a scanner, not a parser: it locates node declarations and nothing else.
-- [x] **5. First mutation.** Double-click a node to rename it in place. The edit replaces
-      only the label's own span, so the rest of the line comes back byte-identical, and a
-      label containing brackets or quotes is quoted and escaped so it round-trips exactly.
-      Enter commits, Escape cancels.
+- [x] **5. First mutation.** Double-click a node **or an edge label** to rename it in place.
+      The edit replaces only that label's own span, so the rest of the line comes back
+      byte-identical, and a label containing brackets, pipes or quotes is quoted and escaped
+      so it round-trips exactly. Enter commits, Escape cancels.
 - [x] **6a. Tools.** A tool picker in the floating island: select (`1` / `v`) and hand
       (`h`), with `Escape` returning to select. Select clicks and renames; hand only pans.
       The viewport moved out into `usePanZoom`.

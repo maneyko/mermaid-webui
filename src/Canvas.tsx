@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import { nodeIdFromElement } from './correlate'
-import { labelOf } from './edit'
+import { edgeLabelCount, edgeLabelOf, labelOf } from './edit'
 import { usePanZoom } from './usePanZoom'
 import Toolbar, { type Tool } from './Toolbar'
 
@@ -29,13 +29,47 @@ function markNodes(container: HTMLDivElement | null, className: string, nodeId: 
   }
 }
 
+// Rendered edge labels carry no id, so the only key is position: the k-th non-empty label on
+// screen is the k-th `|...|` in the source. That holds only while both sequences are the same
+// length, so a mismatch -- syntax the scanner does not understand -- declines the edit rather
+// than renaming some other edge.
+function edgeLabelIndex(element: Element, source: string, container: HTMLDivElement | null) {
+  const rendered = [...(container?.querySelectorAll('g.edgeLabels > g.edgeLabel') ?? [])].filter(
+    (label) => label.textContent?.trim() !== '',
+  )
+  if (rendered.length !== edgeLabelCount(source)) return null
+  const index = rendered.indexOf(element)
+  return index === -1 ? null : index
+}
+
+function editTargetFor(hit: Element, source: string, container: HTMLDivElement | null) {
+  const node = hit.closest('g.node')
+  if (node !== null) {
+    const nodeId = nodeIdFromElement(node)
+    if (nodeId === null) return null
+    return { element: node, target: { kind: 'node', nodeId } as const, label: labelOf(source, nodeId) }
+  }
+
+  const edgeLabel = hit.closest('g.edgeLabel')
+  if (edgeLabel === null) return null
+  const index = edgeLabelIndex(edgeLabel, source, container)
+  if (index === null) return null
+  return {
+    element: edgeLabel,
+    target: { kind: 'edge', index } as const,
+    label: edgeLabelOf(source, index),
+  }
+}
+
 // Shortcuts must not fire while the user is typing in the editor or the rename overlay.
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('input, textarea, [contenteditable="true"]') !== null
 }
 
+type EditTarget = { kind: 'node'; nodeId: string } | { kind: 'edge'; index: number }
+
 interface Editing {
-  nodeId: string
+  target: EditTarget
   value: string
   original: string
   left: number
@@ -60,10 +94,18 @@ interface CanvasProps {
   selected: string | null
   onSelect: (nodeId: string | null) => void
   onRename: (nodeId: string, label: string) => void
+  onRenameEdge: (index: number, label: string) => void
   onConnect: (fromId: string, toId: string) => void
 }
 
-export default function Canvas({ source, selected, onSelect, onRename, onConnect }: CanvasProps) {
+export default function Canvas({
+  source,
+  selected,
+  onSelect,
+  onRename,
+  onRenameEdge,
+  onConnect,
+}: CanvasProps) {
   const [tool, setTool] = useState<Tool>('select')
   const [editing, setEditing] = useState<Editing | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
@@ -228,26 +270,26 @@ export default function Canvas({ source, selected, onSelect, onRename, onConnect
       // dblclick retargets to the common ancestor of the two clicks, which for a mermaid node
       // is the canvas itself. Hit-testing the coordinates instead gives the real node.
       onDoubleClick={(event) => {
-        if (tool !== 'select') return
-        const node = document.elementFromPoint(event.clientX, event.clientY)?.closest('g.node')
-        if (node == null || frame.current === null) return
-        const nodeId = nodeIdFromElement(node)
-        if (nodeId === null) return
+        if (tool !== 'select' || frame.current === null) return
+        const hit = document.elementFromPoint(event.clientX, event.clientY)
+        if (hit == null) return
+
+        const found = editTargetFor(hit, source, diagram.current)
+        if (found === null) return
 
         // getBoundingClientRect already accounts for the viewport transform, so the overlay
-        // lands on the node at any pan or zoom.
-        const nodeBounds = node.getBoundingClientRect()
+        // lands on what it replaces at any pan or zoom.
+        const bounds = found.element.getBoundingClientRect()
         const frameBounds = frame.current.getBoundingClientRect()
-        const label = labelOf(source, nodeId)
 
         setEditing({
-          nodeId,
-          value: label,
-          original: label,
-          left: nodeBounds.left - frameBounds.left,
-          top: nodeBounds.top - frameBounds.top,
-          width: nodeBounds.width,
-          height: nodeBounds.height,
+          target: found.target,
+          value: found.label,
+          original: found.label,
+          left: bounds.left - frameBounds.left,
+          top: bounds.top - frameBounds.top,
+          width: bounds.width,
+          height: bounds.height,
         })
       }}
     >
@@ -305,9 +347,9 @@ export default function Canvas({ source, selected, onSelect, onRename, onConnect
             const cancelled = abandoned.current
             abandoned.current = false
             setEditing(null)
-            if (!cancelled && editing.value !== editing.original) {
-              onRename(editing.nodeId, editing.value)
-            }
+            if (cancelled || editing.value === editing.original) return
+            if (editing.target.kind === 'node') onRename(editing.target.nodeId, editing.value)
+            else onRenameEdge(editing.target.index, editing.value)
           }}
         />
       )}

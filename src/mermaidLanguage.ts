@@ -47,7 +47,13 @@ export const mermaidLanguage = StreamLanguage.define<LabelState>({
         state.inEdgeLabel = false
         return 'punctuation'
       }
-      stream.eatWhile(/[^|]/)
+      // A quoted stretch goes in whole, so the pipe in `|"yes|no"|` -- which is what we emit
+      // for an edge label containing one -- does not close the label early.
+      if (stream.eat('"')) {
+        while (!stream.eol() && stream.next() !== '"') continue
+        return 'string'
+      }
+      stream.eatWhile(/[^|"]/)
       return 'string'
     }
 
