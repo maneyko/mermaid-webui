@@ -307,50 +307,18 @@ export function findEdges(source: string): EdgeSpan[] {
   return edges
 }
 
-// The text inside each `|...|` edge label, in declaration order. Node shapes and quoted
-// strings are skipped so a pipe inside a node label -- `A["a|b"]` -- is not mistaken for a
-// delimiter. Deliberately does not enumerate edges: rendered edge labels carry no identity of
-// any kind, so the only usable key is position, and callers pair the k-th non-empty rendered
-// label with the k-th span here.
-export function findEdgeLabels(source: string): Span[] {
-  const spans: Span[] = []
-  let index = 0
-
-  while (index < source.length) {
-    if (source.startsWith('%%', index)) {
-      index = skipToNewline(source, index)
-      continue
-    }
-
-    const character = source[index]
-
-    if (character === '"') {
-      index = skipDelimited(source, index, '"')
-      continue
-    }
-
-    if (character === '|') {
-      const closing = closingPipe(source, index)
-      if (closing === -1) {
-        index += 1
-        continue
-      }
-      spans.push({ from: index + 1, to: closing })
-      index = closing + 1
-      continue
-    }
-
-    const identifier = IDENTIFIER.exec(source.slice(index))
-    if (identifier === null) {
-      index += 1
-      continue
-    }
-
-    const idEnd = index + identifier[0].length
-    index = skipSuffix(source, idEnd) ?? idEnd
+// The text inside the `|...|` riding on an edge's link, or null when the edge carries no
+// label. Searched inside the link span rather than across the file, which is what ties a label
+// to an edge: they are one thing addressed by one index, and a pipe anywhere else -- inside a
+// node label such as `A["a|b"]` -- is outside the range and cannot be mistaken for one.
+export function edgeLabelSpan(source: string, edge: EdgeSpan): Span | null {
+  for (let index = edge.linkFrom; index < edge.linkTo; index += 1) {
+    if (source[index] !== '|') continue
+    const closing = closingPipe(source, index)
+    if (closing === -1 || closing >= edge.linkTo) return null
+    return { from: index + 1, to: closing }
   }
-
-  return spans
+  return null
 }
 
 // Mermaid stamps rendered nodes with `<renderId>-flowchart-<nodeId>-<n>`, where `<n>` is an

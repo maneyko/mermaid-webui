@@ -4,7 +4,6 @@ import { nodeIdFromElement } from './correlate'
 import {
   colorOf,
   edgeCount,
-  edgeLabelCount,
   edgeLabelOf,
   labelOf,
   QUICK_SHAPES,
@@ -31,12 +30,10 @@ const GRID_SPACING = 20
 // flight when the next keystroke starts another one.
 let renderCount = 0
 
-// An unlabelled edge still emits a `g.edgeLabel`, but an empty one has nothing to point at,
-// so the clickable labels are the non-empty ones.
+// One per edge, in declaration order, whether or not the edge carries a label -- which is what
+// lets a single index address the edge, its label element and its span in the source.
 function renderedEdgeLabels(container: HTMLDivElement | null): Element[] {
-  return [...(container?.querySelectorAll('g.edgeLabels > g.edgeLabel') ?? [])].filter(
-    (label) => label.textContent?.trim() !== '',
-  )
+  return [...(container?.querySelectorAll('g.edgeLabels > g.edgeLabel') ?? [])]
 }
 
 function renderedEdges(container: HTMLDivElement | null): Element[] {
@@ -73,24 +70,13 @@ function mark(container: HTMLDivElement | null, className: string, target: EditT
   })
 }
 
-// Rendered edge labels carry no id, so the only key is position: the k-th non-empty label on
-// screen is the k-th `|...|` in the source. That holds only while both sequences are the same
-// length, so a mismatch -- syntax the scanner does not understand -- declines the edit rather
-// than renaming some other edge.
-function edgeLabelIndex(element: Element, source: string, container: HTMLDivElement | null) {
-  const rendered = renderedEdgeLabels(container)
-  if (rendered.length !== edgeLabelCount(source)) return null
+// Nothing rendered on an edge carries an id -- `data-id` counts entities rather than pairs --
+// so position is the only key, and it is the same key for the line and the label riding on it.
+// That holds only while the rendered count and the scanned count agree; a mismatch means
+// syntax the scanner does not model, and the edit is declined rather than aimed at random.
+function edgeIndexOf(element: Element, rendered: Element[], source: string) {
+  if (rendered.length !== edgeCount(source)) return null
   const index = rendered.indexOf(element)
-  return index === -1 ? null : index
-}
-
-// Edges are addressed the same way and for the same reason: `data-id` counts entities rather
-// than pairs, so position is the only key. A count the scanner disagrees with means syntax it
-// does not model -- the `&` list form -- and the edit is declined rather than aimed at random.
-function edgeIndex(handle: Element, source: string, container: HTMLDivElement | null) {
-  const handles = [...(container?.querySelectorAll('path.edge-handle') ?? [])]
-  if (handles.length !== edgeCount(source)) return null
-  const index = handles.indexOf(handle)
   return index === -1 ? null : index
 }
 
@@ -149,6 +135,10 @@ interface Ghost {
   at: Point
   from: Point | null
 }
+
+// What mermaid renders an edge label at, measured, and the height the rename box borrows when
+// there is no label yet to measure.
+const LABEL_HEIGHT = 24
 
 // Roughly a node's size at 100%, scaled with the viewport so it reads against the diagram.
 const GHOST_SIZE = 60
@@ -242,7 +232,7 @@ export default function Canvas({
 
     const label = hit.closest('g.edgeLabel')
     if (label !== null) {
-      const index = edgeLabelIndex(label, source, diagram.current)
+      const index = edgeIndexOf(label, renderedEdgeLabels(diagram.current), source)
       return index === null
         ? null
         : { element: label, target: { kind: 'edgeLabel', index } as EditTarget }
@@ -250,13 +240,16 @@ export default function Canvas({
 
     const handle = hit.closest('path.edge-handle')
     if (handle === null) return null
-    const index = edgeIndex(handle, source, diagram.current)
+    const handles = [...(diagram.current?.querySelectorAll('path.edge-handle') ?? [])]
+    const index = edgeIndexOf(handle, handles, source)
     return index === null ? null : { element: handle, target: { kind: 'edge', index } as EditTarget }
   }
 
-  // An edge has nothing of its own to rename, so a double-click on one does nothing.
-  const renameable = (target: EditTarget): Renameable | null =>
-    target.kind === 'edge' ? null : target
+  // An edge carries no text of its own, so renaming one means editing the label it carries --
+  // which for an edge that has never had one is how you give it a label at all. Both are the
+  // same index, so this is only a change of what is being edited, not of which edge.
+  const renameable = (target: EditTarget): Renameable =>
+    target.kind === 'edge' ? { kind: 'edgeLabel', index: target.index } : target
 
   const labelFor = (target: Renameable) =>
     target.kind === 'node' ? labelOf(source, target.nodeId) : edgeLabelOf(source, target.index)
@@ -280,20 +273,48 @@ export default function Canvas({
     return toFrame(bounds.left + bounds.width / 2, bounds.bottom + GHOST_GAP * view.scale)
   }
 
-  const openEditorOn = (element: Element, target: Renameable, label: string) => {
-    if (frame.current === null) return
-    const bounds = element.getBoundingClientRect()
-    const frameBounds = frame.current.getBoundingClientRect()
-    setEditing({
-      target,
-      label,
-      anchor: {
-        left: bounds.left - frameBounds.left,
-        top: bounds.top - frameBounds.top,
-        width: bounds.width,
-        height: bounds.height,
-      },
-    })
+  // What a target is drawn as. Nodes are found by id; everything on an edge by position.
+  const elementFor = (target: Renameable): Element | null => {
+    if (target.kind === 'edgeLabel') return renderedEdgeLabels(diagram.current)[target.index] ?? null
+    return (
+      [...(diagram.current?.querySelectorAll('g.node') ?? [])].find(
+        (node) => nodeIdFromElement(node) === target.nodeId,
+      ) ?? null
+    )
+  }
+
+  // An edge that has never had a label has no box to borrow: mermaid renders the empty element
+  // at zero size and parks it away from the line, so the box goes on the middle of the line.
+  const midpointOf = (index: number): Anchor | null => {
+    const path = renderedEdges(diagram.current)[index] as SVGPathElement | undefined
+    const screen = path?.getScreenCTM()
+    if (path === undefined || screen == null) return null
+    const middle = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(screen)
+    const height = LABEL_HEIGHT * view.scale
+    const at = toFrame(middle.x, middle.y)
+    return { left: at.x, top: at.y - height / 2, width: 0, height }
+  }
+
+  const anchorFor = (target: Renameable): Anchor | null => {
+    const bounds = elementFor(target)?.getBoundingClientRect()
+    if (bounds === undefined || bounds.height === 0) {
+      return target.kind === 'edgeLabel' ? midpointOf(target.index) : null
+    }
+    const origin = frame.current?.getBoundingClientRect()
+    return {
+      left: bounds.left - (origin?.left ?? 0),
+      top: bounds.top - (origin?.top ?? 0),
+      width: bounds.width,
+      height: bounds.height,
+    }
+  }
+
+  // The one way in: a double-click, Enter on the selection, and a freshly created node all
+  // arrive here. `label` is passed only for a node that does not exist in `source` yet.
+  const openRename = (target: EditTarget, label?: string) => {
+    const renaming = renameable(target)
+    const anchor = anchorFor(renaming)
+    if (anchor !== null) setEditing({ target: renaming, label: label ?? labelFor(renaming), anchor })
   }
 
   // With a node selected the shape buttons restyle it; with nothing selected they arm the
@@ -310,6 +331,8 @@ export default function Canvas({
   latestPickShape.current = pickShape
   const latestDelete = useRef(onDelete)
   latestDelete.current = onDelete
+  const latestOpenRename = useRef(openRename)
+  latestOpenRename.current = openRename
 
   useEffect(() => {
     let stale = false
@@ -327,14 +350,13 @@ export default function Canvas({
           const created = landed.current
           if (created !== null) {
             landed.current = null
-            const added = [...diagram.current.querySelectorAll('g.node')].find(
-              (node) => nodeIdFromElement(node) === created,
-            )
-            if (added !== undefined) {
+            const target: EditTarget = { kind: 'node', nodeId: created }
+            const added = elementFor(target)
+            if (added !== null) {
               // Adding a node reflows the whole diagram, so every node on screen has just
               // moved. The pulse is what says which of them is the new one.
               added.classList.add('landed')
-              openEditorOn(added, { kind: 'node', nodeId: created }, '')
+              openRename(target, '')
             }
           }
         }
@@ -375,6 +397,13 @@ export default function Canvas({
       if ((event.key === 'Backspace' || event.key === 'Delete') && current !== null) {
         event.preventDefault()
         latestDelete.current(current)
+      }
+
+      // The keyboard half of a double-click. `isTyping` above is what keeps the Enter that
+      // commits a rename from immediately reopening the box.
+      if (event.key === 'Enter' && current !== null) {
+        event.preventDefault()
+        latestOpenRename.current(current)
       }
 
       const shapeIndex = ['3', '4', '5', '6'].indexOf(event.key)
@@ -532,10 +561,7 @@ export default function Canvas({
       onDoubleClick={(event) => {
         if (tool !== 'select') return
         const found = targetAt(event.clientX, event.clientY)
-        if (found === null) return
-        const target = renameable(found.target)
-        if (target === null) return
-        openEditorOn(found.element, target, labelFor(target))
+        if (found !== null) openRename(found.target)
       }}
     >
       <div

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import CodePane, { type Range } from './CodePane'
 import Canvas, { type EditTarget } from './Canvas'
-import { findEdgeLabels, findEdges, findNodes } from './correlate'
+import { edgeLabelSpan, findEdges, findNodes } from './correlate'
 import {
   filesSupported,
   pickToOpen,
@@ -100,13 +100,16 @@ export default function App() {
   // Takes the text to measure against rather than closing over it, because recolouring keeps
   // the selection and has to recompute the span against the rewritten source.
   const spanOf = (target: EditTarget, text: string): Range | null => {
-    if (target.kind === 'edgeLabel') return findEdgeLabels(text)[target.index] ?? null
-    if (target.kind === 'edge') {
-      const edge = findEdges(text)[target.index]
-      return edge === undefined ? null : { from: edge.from, to: edge.to }
+    if (target.kind === 'node') {
+      const node = findNodes(text).get(target.nodeId)
+      return node === undefined ? null : { from: node.from, to: node.to }
     }
-    const node = findNodes(text).get(target.nodeId)
-    return node === undefined ? null : { from: node.from, to: node.to }
+
+    const edge = findEdges(text)[target.index]
+    if (edge === undefined) return null
+    const whole = { from: edge.from, to: edge.to }
+    // An edge with no label yet has no text of its own to point at, so it reveals the edge.
+    return target.kind === 'edge' ? whole : (edgeLabelSpan(text, edge) ?? whole)
   }
 
   const select = (target: EditTarget | null) => {

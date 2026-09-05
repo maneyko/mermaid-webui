@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test'
-import { findEdgeLabels, findNodes, findStatements } from './correlate'
+import { edgeLabelSpan, findEdges, findNodes, findStatements } from './correlate'
+
+// The text of each edge's label, or null where the edge has none.
+function edgeLabels(source: string): (string | null)[] {
+  return findEdges(source).map((edge) => {
+    const span = edgeLabelSpan(source, edge)
+    return span === null ? null : source.slice(span.from, span.to)
+  })
+}
 
 function spanOf(source: string, id: string): string {
   const node = findNodes(source).get(id)
@@ -170,8 +178,28 @@ test('a brace inside a quoted metadata label does not close the block', () => {
 })
 
 test('a pipe inside a metadata label is not an edge label', () => {
-  const source = 'flowchart TD\n  A@{ shape: cyl, label: "a|b" } -->|Real| B\n'
-  expect(findEdgeLabels(source).map((s) => source.slice(s.from, s.to))).toEqual(['Real'])
+  expect(edgeLabels('flowchart TD\n  A@{ shape: cyl, label: "a|b" } -->|Real| B\n')).toEqual([
+    'Real',
+  ])
+})
+
+// The label belongs to the edge it rides on, so it is found inside the link span rather than
+// by counting `|` pairs across the file. An edge without one reports null, not the next one.
+test('each edge reports its own label, and null where it has none', () => {
+  const source = 'flowchart TD\n  A -->|x| B\n  B --> C\n  C -->|y| D\n'
+  expect(edgeLabels(source)).toEqual(['x', null, 'y'])
+})
+
+test('a pipe inside a node label is not mistaken for an edge label', () => {
+  expect(edgeLabels('flowchart TD\n  A["a|b"] -->|Real| B\n')).toEqual(['Real'])
+})
+
+test('a pipe inside a quoted edge label does not end it', () => {
+  expect(edgeLabels('flowchart TD\n  A -->|"yes|no"| B\n')).toEqual(['"yes|no"'])
+})
+
+test('an edge label in a comment is not an edge at all', () => {
+  expect(edgeLabels('flowchart TD\n  %% A -->|Ghost| B\n  A -->|Real| B\n')).toEqual(['Real'])
 })
 
 test('sibling subgraphs are different scopes', () => {

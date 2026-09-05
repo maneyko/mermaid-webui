@@ -331,15 +331,19 @@ recompute the spans, not carry them across.
 
 ### Renaming
 
-- **A click selects; a double-click renames.** These were briefly the same gesture, on the
-  reasoning that dragging was the only other thing a click could mean. Delete disproved it:
-  a click that opens a text input means the selection can never be acted on by a keystroke,
-  because the input has the keyboard. Anything that adds a shortcut acting on the selection
-  runs into the same wall, so the two gestures stay apart.
-- **Both work on an edge label as well as a node.** `EditTarget` is the union, and it is what
-  selection, hover and the rename overlay are all keyed on. A node selection additionally
-  drives the shape buttons and delete, which is why `Canvas` narrows it to `selectedNode`;
-  an edge label is selectable but is not a node and must not reach those.
+- **A click selects; a double-click, or Enter on the selection, renames.** Click and rename
+  were briefly the same gesture, on the reasoning that dragging was the only other thing a
+  click could mean. Delete disproved it: a click that opens a text input means the selection
+  can never be acted on by a keystroke, because the input has the keyboard. Enter is the
+  keyboard half of the double-click, and works only because `isTyping` already excludes the
+  box itself -- otherwise the Enter that commits a rename would reopen it on the spot.
+- **Everything selectable is renameable, including an edge**, which has no text of its own and
+  so renames the label it carries. `renameable` is that one mapping, `openRename` the one way
+  in, and both are reached by a double-click, by Enter, and by a freshly created node.
+- **All three of a node, an edge and an edge label are selectable.** `EditTarget` is the union,
+  and it is what selection, hover and the rename overlay are all keyed on. A node selection
+  additionally drives the shape buttons and delete, which is why `Canvas` narrows it to
+  `selectedNode`; an edge label is selectable but is not a node and must not reach those.
 - **The overlay lives in `src/RenameOverlay.tsx` and owns the edit, not just the box.** It
   holds the text being typed and decides how the edit ends; `Canvas` supplies only what is
   being renamed, the rectangle to sit over, and the two ways out. The split is worth keeping
@@ -503,6 +507,17 @@ including a few pixels of drift, because that is the case that actually breaks.
   Setting a controlled input's value from outside React needs the native setter
   (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set`) followed by an
   `input` event, or React will not see it.
+- **`document.hasFocus()` is false in the driven tab, so `blur()` fires nothing.** Commit-on-
+  blur therefore cannot be driven the way a person drives it: `input.focus()` sets
+  `activeElement`, `blur()` clears it, and no focus event is dispatched at all, so the box just
+  sits there looking broken. Dispatch `new FocusEvent('focusout', {bubbles: true})` at the
+  input instead -- that is the native event React binds `onBlur` to. Losing focus between two
+  tool calls is normal for the same reason, so anything involving focus has to happen inside a
+  single `javascript_tool` call.
+- **`setTimeout` is throttled to ~1s in the driven tab**, because it is backgrounded. A poll
+  loop written as `setTimeout(40)` runs at 1Hz, which makes a 1.1s CSS animation look like it
+  finishes in two frames. To inspect an animation, pause it and set `currentTime` rather than
+  sampling it.
 - **The first synthetic click after a navigate or reload is frequently dropped**, and so are
   clicks whose coordinates came from a screenshot taken before the window resized. Assert the
   intermediate state -- that the node really did get selected -- before concluding anything
@@ -566,18 +581,26 @@ expresses the change, so every byte outside it comes back identical.
   this way against mermaid 11.17.2. Re-run it whenever either of those two changes.
 - **Renaming a bare node gives it a shape** (`B` becomes `B[Label]`) at the declaration only,
   leaving every other mention of the id alone.
-- **Edge labels are addressed by position, because they have no identity.** A rendered
-  `g.edgeLabel` carries no id and no data attribute of any kind. What saves us is that
-  `g.edgeLabels` children and `g.edgePaths` children are both emitted in declaration order,
-  so the k-th non-empty rendered label is the k-th `|...|` in the source. Do not try to use
-  the number in an edge path's `data-id`: a second `B --> C` came out as `L_B_C_2`, so it is
-  an internal counter, not a per-pair index.
-- That positional mapping is only sound while both sequences have the same length, so
-  `edgeLabelCount` is compared against the rendered count and the edit is declined on a
-  mismatch. The known trigger is the `A -- text --> B` inline label form, which the scanner
-  does not understand; declining beats renaming a different edge.
-- Only labelled edges are reachable: an unlabelled edge still renders a `g.edgeLabel`, but an
-  empty one has no area to double-click.
+- **An edge and its label are one index.** Neither has any identity -- a rendered `g.edgeLabel`
+  carries no id or data attribute, and the number in a path's `data-id` counts entities, not
+  pairs, so a second `B --> C` came out as `L_B_C_2`. What saves us is that mermaid emits
+  exactly one `g.edgePaths > path.flowchart-link` and exactly one `g.edgeLabels > g.edgeLabel`
+  per edge, both in declaration order, *including for edges with no label*. Verified on
+  mermaid 11.17.2. So the k-th path, the k-th label element and the k-th `findEdges` span are
+  the same edge, and `edgeLabelSpan` finds the `|...|` inside that edge's own link range rather
+  than counting pipes across the file.
+- **That is what lets an unlabelled edge be given a label**, which is the whole reason to
+  address it this way: `edgeLabelOf` reads a missing label as empty, and `renameEdgeLabel`
+  writes one in hard against the arrow. There used to be a second, label-only index; two ways
+  to name the same thing is what made an unlabelled edge unreachable.
+- The mapping is only sound while the rendered count and `edgeCount` agree, so `edgeIndexOf`
+  compares them and declines on a mismatch. The known trigger is the `A -- text --> B` inline
+  label form; declining beats editing a different edge.
+- **An empty `g.edgeLabel` is not a usable anchor.** It measures 0x0 *and* mermaid parks it
+  away from its own edge -- in the sample chart the element sat 300px from the line it belongs
+  to. So the rename box for an edge with no label goes on the middle of the path instead, via
+  `getPointAtLength` through `getScreenCTM`. Do not trust the element's position until
+  something has been drawn in it.
 
 ### Rendering
 

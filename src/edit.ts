@@ -3,10 +3,11 @@
 // back identical, because the user hand-edits this text and keeps it in git.
 
 import {
-  findEdgeLabels,
+  edgeLabelSpan,
   findEdges,
   findNodes,
   findStatements,
+  type EdgeSpan,
   type NodeSpan,
   type Span,
   type Statement,
@@ -39,23 +40,31 @@ export function labelOf(source: string, nodeId: string): string {
   return unquoteLabel(source.slice(node.labelFrom, node.labelTo))
 }
 
+// An edge with no label reads as one with an empty label, which is what lets the same gesture
+// give an edge its first label and change the one it has.
 export function edgeLabelOf(source: string, index: number): string {
-  const span = findEdgeLabels(source)[index]
-  return span === undefined ? '' : unquoteLabel(source.slice(span.from, span.to))
+  const edge = findEdges(source)[index]
+  if (edge === undefined) return ''
+  const span = edgeLabelSpan(source, edge)
+  return span === null ? '' : unquoteLabel(source.slice(span.from, span.to))
+}
+
+// Where a label goes on a link that has none: hard against the arrow, `A -->|Text| B`.
+function afterArrow(source: string, edge: EdgeSpan): number {
+  let end = edge.linkTo
+  while (end > edge.linkFrom && /\s/.test(source[end - 1] as string)) end -= 1
+  return end
 }
 
 export function renameEdgeLabel(source: string, index: number, label: string): string {
-  const span = findEdgeLabels(source)[index]
-  if (span === undefined) return source
-  return source.slice(0, span.from) + quoteLabel(label) + source.slice(span.to)
-}
+  const edge = findEdges(source)[index]
+  if (edge === undefined) return source
 
-// Rendered edge labels are matched to source spans by position, so that is only safe while
-// both sequences have the same length. Anything the scanner does not understand -- the
-// `A -- text --> B` inline form, most likely -- shows up here as a mismatch, and the caller
-// declines to edit rather than renaming the wrong edge.
-export function edgeLabelCount(source: string): number {
-  return findEdgeLabels(source).length
+  const span = edgeLabelSpan(source, edge)
+  if (span !== null) return source.slice(0, span.from) + quoteLabel(label) + source.slice(span.to)
+
+  const at = afterArrow(source, edge)
+  return `${source.slice(0, at)}|${quoteLabel(label)}|${source.slice(at)}`
 }
 
 const DEFAULT_INDENT = '  '
@@ -434,8 +443,10 @@ export function edgeCount(source: string): number {
 // mermaid has no empty label, so a cleared one is stored as a quoted blank and still renders
 // an empty box sitting on the edge.
 export function deleteEdgeLabel(source: string, index: number): string {
-  const span = findEdgeLabels(source)[index]
-  if (span === undefined) return source
+  const edge = findEdges(source)[index]
+  if (edge === undefined) return source
+  const span = edgeLabelSpan(source, edge)
+  if (span === null) return source
   return source.slice(0, span.from - 1) + source.slice(span.to + 1)
 }
 

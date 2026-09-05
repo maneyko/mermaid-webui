@@ -5,7 +5,8 @@ the left, live diagram on the right, tool picker on top. Runs entirely in the br
 backend.
 
 **Status: it edits, and it saves.** Click a node, an edge or an edge label to select it,
-double-click to rename it in place, Delete to remove it; drag between nodes to connect them;
+double-click or press Enter to rename it in place, Delete to remove it; drag between nodes to
+connect them;
 arm one of mermaid's 53 shapes and click a node to hang a new one off it, or blank canvas for a
 node of its own; with something selected the same buttons restyle it; undo from anywhere with
 cmd+Z. Every change rewrites the source with the smallest possible edit. Your work survives a
@@ -166,6 +167,14 @@ viable at all; everything before it was chrome.
       pulses once it arrives, which is the honest half of that: it reports where dagre put it
       rather than guessing beforehand.
 
+- [x] **18. Label an edge that has none, and rename from the keyboard.** Double-clicking an
+      edge opens a text box on the middle of the line and writes `A -->|Text| B`; Enter on
+      anything selected opens the same box, so renaming no longer needs the mouse. Both fell
+      out of giving an edge and its label one index instead of two. They used to be counted
+      separately — labels among labels, edges among edges — which meant an edge with no label
+      had no index at all and nothing to double-click, since mermaid renders its label element
+      at zero size and parks it away from the line.
+
 Not done yet, roughly in the order I would take them:
 
 - [ ] **Import and export for browsers without the File System Access API.** A download link
@@ -237,11 +246,12 @@ offering connection points — four points would imply a choice that cannot be e
 - **Deleting an edge does not renumber `linkStyle`.** `linkStyle` addresses edges by index,
   so removing one shifts every later index and the styling lands on the wrong edge. Nothing
   in the canvas writes `linkStyle`, so this only bites a hand-written document.
-- **Selecting and deleting are declined on `A & B --> C`.** The scanner reads edges as the
+- **Everything on an edge is declined on `A & B --> C`.** The scanner reads edges as the
   links between consecutive node references, which is not what the `&` list form means, so it
-  reports a count mermaid disagrees with and every edge in the document stops responding to
-  clicks. Declining beats deleting the wrong edge; the same is true of the
-  `A -- text --> B` inline label form.
+  reports a count mermaid disagrees with and every edge in the document — and now every edge
+  label too, since they share the index — stops responding to clicks. Nodes are unaffected.
+  Declining beats editing the wrong edge; the same is true of the `A -- text --> B` inline
+  label form.
 
 ## Prior art
 

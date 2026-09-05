@@ -13,7 +13,6 @@ import {
   nextNodeId,
   setNodeShape,
   SHAPES,
-  edgeLabelCount,
   edgeLabelOf,
   labelOf,
   quoteLabel,
@@ -231,7 +230,7 @@ test('what a metadata shape writes is readable back by the scanner', () => {
   const next = setNodeShape(SOURCE, 'B', shape('cyl'))
   expect(labelOf(next, 'B')).toBe('Go shopping')
   expect(edgeCount(next)).toBe(2)
-  expect(edgeLabelCount(next)).toBe(1)
+  expect([0, 1].map((i) => edgeLabelOf(next, i))).toEqual(['Get money', ''])
   expect(nextNodeId(next)).toBe('D')
   expect(renameLabel(next, 'B', 'a|b, "c"')).toContain('label: "a|b, #quot;c#quot;"')
 })
@@ -276,9 +275,16 @@ const LABELLED = `flowchart TD
   C -->|Three| F[Car]
 `
 
-test('edge labels are found in declaration order, skipping unlabelled edges', () => {
-  expect(edgeLabelCount(LABELLED)).toBe(3)
-  expect([0, 1, 2].map((i) => edgeLabelOf(LABELLED, i))).toEqual(['Get money', 'One', 'Three'])
+// A label is addressed by its edge, so the index of a labelled edge does not shift when an
+// unlabelled one sits before it, and an unlabelled edge reads as one with an empty label.
+test('every edge has a label index, whether or not it has a label', () => {
+  expect(edgeCount(LABELLED)).toBe(4)
+  expect([0, 1, 2, 3].map((i) => edgeLabelOf(LABELLED, i))).toEqual([
+    'Get money',
+    '',
+    'One',
+    'Three',
+  ])
 })
 
 test('renaming an edge label leaves the rest of the line byte-identical', () => {
@@ -290,14 +296,43 @@ test('renaming an edge label leaves the rest of the line byte-identical', () => 
 `)
 })
 
-test('renaming edge label 1 does not touch edge label 0 or 2', () => {
-  const next = renameEdgeLabel(LABELLED, 1, 'First')
-  expect([0, 1, 2].map((i) => edgeLabelOf(next, i))).toEqual(['Get money', 'First', 'Three'])
+test('renaming edge label 2 does not touch the others', () => {
+  const next = renameEdgeLabel(LABELLED, 2, 'First')
+  expect([0, 1, 2, 3].map((i) => edgeLabelOf(next, i))).toEqual([
+    'Get money',
+    '',
+    'First',
+    'Three',
+  ])
+})
+
+// The point of addressing a label by its edge: an edge that never had one can be given one.
+test('naming an unlabelled edge puts the label on its arrow', () => {
+  expect(renameEdgeLabel(LABELLED, 1, 'Then')).toBe(`flowchart TD
+  A[Christmas] -->|Get money| B(Go shopping)
+  B -->|Then| C{Let me think}
+  C -->|One| D[Laptop]
+  C -->|Three| F[Car]
+`)
+})
+
+test('a label lands against the arrow whatever the arrow and the spacing are', () => {
+  expect(renameEdgeLabel('flowchart TD\n  A-->B\n', 0, 'x')).toBe('flowchart TD\n  A-->|x|B\n')
+  expect(renameEdgeLabel('flowchart TD\n  A -.-> B\n', 0, 'x')).toBe(
+    'flowchart TD\n  A -.->|x| B\n',
+  )
+  expect(renameEdgeLabel('flowchart TD\n  A ==> B\n', 0, 'x')).toBe('flowchart TD\n  A ==>|x| B\n')
+})
+
+test('a label added to one edge of a chain leaves the other alone', () => {
+  const next = renameEdgeLabel('flowchart TD\n  A --> B --> C\n', 1, 'second')
+  expect(next).toBe('flowchart TD\n  A --> B -->|second| C\n')
+  expect([0, 1].map((i) => edgeLabelOf(next, i))).toEqual(['', 'second'])
 })
 
 test('a pipe inside a node label is not mistaken for an edge label', () => {
   const source = 'flowchart TD\n  A["a|b"] -->|Real| B\n'
-  expect(edgeLabelCount(source)).toBe(1)
+  expect(edgeCount(source)).toBe(1)
   expect(edgeLabelOf(source, 0)).toBe('Real')
 })
 
@@ -305,12 +340,12 @@ test('an edge label containing a pipe is quoted and round-trips', () => {
   const next = renameEdgeLabel(LABELLED, 0, 'yes|no')
   expect(next).toContain('|"yes|no"|')
   expect(edgeLabelOf(next, 0)).toBe('yes|no')
-  expect(edgeLabelCount(next)).toBe(3)
+  expect(edgeCount(next)).toBe(4)
 })
 
 test('edge labels in comments are ignored', () => {
   const source = 'flowchart TD\n  %% A -->|Ghost| B\n  A -->|Real| B\n'
-  expect(edgeLabelCount(source)).toBe(1)
+  expect(edgeCount(source)).toBe(1)
   expect(edgeLabelOf(source, 0)).toBe('Real')
 })
 
@@ -580,7 +615,20 @@ test('deleting an edge label takes the pipes and leaves the edge', () => {
   const next = deleteEdgeLabel(source, 0)
   expect(next).toBe('flowchart TD\n  A[Christmas] --> B(Go shopping)\n')
   expect(edgeCount(next)).toBe(1)
-  expect(edgeLabelCount(next)).toBe(0)
+  expect(edgeLabelOf(next, 0)).toBe('')
+})
+
+test('deleting the label of an edge that has none changes nothing', () => {
+  expect(deleteEdgeLabel(LABELLED, 1)).toBe(LABELLED)
+})
+
+// The round trip the addressing exists for: give an edge a label, read it back, take it off.
+test('a label added to a bare edge can be read back and removed again', () => {
+  const source = 'flowchart TD\n  A --> B\n'
+  const named = renameEdgeLabel(source, 0, 'yes|no')
+  expect(edgeLabelOf(named, 0)).toBe('yes|no')
+  expect(edgeCount(named)).toBe(1)
+  expect(deleteEdgeLabel(named, 0)).toBe(source)
 })
 
 // Clearing the text is a rename, and mermaid has no empty label, so that leaves a blank box
@@ -592,9 +640,8 @@ test('deleting a label is not the same as renaming it to nothing', () => {
 })
 
 test('deleting one label leaves the others in place', () => {
-  const next = deleteEdgeLabel(LABELLED, 1)
-  expect(edgeLabelCount(next)).toBe(2)
-  expect([0, 1].map((i) => edgeLabelOf(next, i))).toEqual(['Get money', 'Three'])
+  const next = deleteEdgeLabel(LABELLED, 2)
+  expect([0, 1, 2, 3].map((i) => edgeLabelOf(next, i))).toEqual(['Get money', '', '', 'Three'])
 })
 
 test('deleting a label that had to be quoted takes the quotes with it', () => {
@@ -612,5 +659,5 @@ test('what deleting an edge writes is readable back by the scanner', () => {
   expect(labelOf(next, 'A')).toBe('Christmas')
   expect(labelOf(next, 'B')).toBe('Go shopping')
   expect(edgeCount(next)).toBe(3)
-  expect(edgeLabelCount(next)).toBe(2)
+  expect([0, 1, 2].map((i) => edgeLabelOf(next, i))).toEqual(['', 'One', 'Two'])
 })
