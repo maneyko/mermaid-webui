@@ -3,7 +3,7 @@ import mermaid from 'mermaid'
 import { nodeIdFromElement } from './correlate'
 import { edgeCount, edgeLabelCount, edgeLabelOf, labelOf, SHAPES, type Shape } from './edit'
 import { usePanZoom } from './usePanZoom'
-import Toolbar, { type Tool } from './Toolbar'
+import Toolbar, { type FileControls, type Tool } from './Toolbar'
 
 // useMaxWidth would make mermaid size the SVG to its container, which fights a viewport that
 // does its own scaling. Fixed natural dimensions leave zoom entirely to our transform.
@@ -146,6 +146,7 @@ interface Connecting {
 interface CanvasProps {
   source: string
   selected: EditTarget | null
+  file: FileControls
   onSelect: (target: EditTarget | null) => void
   onRename: (nodeId: string, label: string) => void
   onRenameEdge: (index: number, label: string) => void
@@ -159,6 +160,7 @@ interface CanvasProps {
 export default function Canvas({
   source,
   selected,
+  file,
   onSelect,
   onRename,
   onRenameEdge,
@@ -490,6 +492,7 @@ export default function Canvas({
 
       <Toolbar
         tool={tool}
+        file={file}
         onToolChange={setTool}
         shape={shape}
         onPickShape={pickShape}

@@ -1,7 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import CodePane, { type Range } from './CodePane'
 import Canvas, { type EditTarget } from './Canvas'
 import { findEdgeLabels, findEdges, findNodes } from './correlate'
+import {
+  filesSupported,
+  pickToOpen,
+  pickToSave,
+  readAutosave,
+  writeAutosave,
+  writeFile,
+} from './storage'
 import {
   addConnectedNode,
   addStandaloneNode,
@@ -22,10 +30,69 @@ const INITIAL_SOURCE = `flowchart TD
   C -->|Three| F[Car]
 `
 
+const BLANK_SOURCE = 'flowchart TD\n'
+
 export default function App() {
-  const [source, setSource] = useState(INITIAL_SOURCE)
+  // The sample is only ever the first-run document; after that the autosave is what you left.
+  const [source, setSource] = useState(() => readAutosave() ?? INITIAL_SOURCE)
   const [selected, setSelected] = useState<EditTarget | null>(null)
   const [reveal, setReveal] = useState<Range | null>(null)
+  const [file, setFile] = useState<FileSystemFileHandle | null>(null)
+  const [savedSource, setSavedSource] = useState<string | null>(null)
+
+  useEffect(() => {
+    writeAutosave(source)
+  }, [source])
+
+  const openFile = async () => {
+    const opened = await pickToOpen()
+    if (opened === null) return
+    setFile(opened.handle)
+    setSavedSource(opened.text)
+    setSource(opened.text)
+    setSelected(null)
+    setReveal(null)
+  }
+
+  // A failed write leaves savedSource alone, so the unsaved marker stays up rather than the
+  // save silently appearing to have worked.
+  const saveFile = async () => {
+    const handle = file ?? (await pickToSave('diagram.mmd'))
+    if (handle === null) return
+    await writeFile(handle, source)
+    setFile(handle)
+    setSavedSource(source)
+  }
+
+  // No confirmation, because this goes through the editor like any other rewrite and cmd+Z
+  // brings the old document straight back.
+  const newFile = () => {
+    setFile(null)
+    setSavedSource(null)
+    setSource(BLANK_SOURCE)
+    setSelected(null)
+    setReveal(null)
+  }
+
+  const latestFileActions = useRef({ openFile, saveFile })
+  latestFileActions.current = { openFile, saveFile }
+
+  useEffect(() => {
+    if (!filesSupported) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return
+      const key = event.key.toLowerCase()
+      if (key !== 's' && key !== 'o') return
+      // Otherwise this is the browser's own Save Page and Open File.
+      event.preventDefault()
+      const { openFile: open, saveFile: save } = latestFileActions.current
+      void (key === 's' ? save() : open())
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   // A node reveals its whole declaration, an edge label the text between its pipes, and an
   // edge the pair of nodes it joins -- which for `A --> B --> C` is the half you clicked.
@@ -59,6 +126,15 @@ export default function App() {
       <Canvas
         source={source}
         selected={selected}
+        file={{
+          name: file?.name ?? 'Untitled',
+          // Only meaningful against a file: with no file, nothing is saved by definition.
+          dirty: file !== null && source !== savedSource,
+          supported: filesSupported,
+          onNew: newFile,
+          onOpen: () => void openFile(),
+          onSave: () => void saveFile(),
+        }}
         onSelect={select}
         onRename={(nodeId, label) => {
           // The rewritten text moves every span after the edit, so the old ones are dead.

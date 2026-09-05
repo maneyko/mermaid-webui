@@ -2,8 +2,18 @@ import { SHAPES, type Shape } from './edit'
 
 export type Tool = 'select' | 'hand' | 'arrow' | 'shape'
 
+export interface FileControls {
+  name: string
+  dirty: boolean
+  supported: boolean
+  onNew: () => void
+  onOpen: () => void
+  onSave: () => void
+}
+
 interface ToolbarProps {
   tool: Tool
+  file: FileControls
   onToolChange: (tool: Tool) => void
   shape: Shape
   onPickShape: (shape: Shape) => void
@@ -122,6 +132,7 @@ const SHAPE_SHORTCUTS = ['3', '4', '5', '6']
 
 export default function Toolbar({
   tool,
+  file,
   onToolChange,
   shape,
   onPickShape,
@@ -144,6 +155,27 @@ export default function Toolbar({
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
+      {/* Hidden rather than disabled where the File System Access API is missing: the islands
+          hold controls that work, and there is no half of this that does anything useful. */}
+      {file.supported && (
+        <div className="island file-controls">
+          <span className="file-name" title={file.name}>
+            {file.name}
+            {file.dirty ? ' *' : ''}
+          </span>
+          <span className="separator" />
+          <button type="button" title="Start a new diagram" onClick={file.onNew}>
+            New
+          </button>
+          <button type="button" title="Open a .mmd file (cmd+O)" onClick={file.onOpen}>
+            Open
+          </button>
+          <button type="button" title="Save to the .mmd file (cmd+S)" onClick={file.onSave}>
+            Save
+          </button>
+        </div>
+      )}
+
       <div className="island tools">
         {TOOLS.map(({ tool: each, label, shortcut, icon: Icon }) => (
           <button

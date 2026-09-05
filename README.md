@@ -4,11 +4,12 @@ A drag-and-drop WYSIWYG editor for [mermaid](https://mermaid.js.org) diagrams. C
 the left, live diagram on the right, tool picker on top. Runs entirely in the browser with no
 backend.
 
-**Status: it edits.** Click a node, an edge or an edge label to select it, double-click to
-rename it in place, Delete to remove it; drag between nodes to connect them; drag out from one
-to add a new node; pick a shape to restyle what is selected; undo from anywhere with cmd+Z.
-Every change rewrites the source with the smallest possible edit. What is missing is saving
-your work. See [Work items](#work-items).
+**Status: it edits, and it saves.** Click a node, an edge or an edge label to select it,
+double-click to rename it in place, Delete to remove it; drag between nodes to connect them;
+drag out from one to add a new node; pick a shape to restyle what is selected; undo from
+anywhere with cmd+Z. Every change rewrites the source with the smallest possible edit. Your
+work survives a refresh, and cmd+S writes it back to a real `.mmd` file — that last part
+needs Chrome or Edge. See [Work items](#work-items).
 
 ## Why this is not a whiteboard
 
@@ -124,21 +125,18 @@ viable at all; everything before it was chrome.
       nothing does, because mermaid has no empty label and stores a cleared one as a quoted
       blank that still renders an empty box on the edge.
 
+- [x] **14. Autosave and real files.** The source is written to `localStorage` on every
+      change and read back on startup, so a refresh no longer costs you the diagram. That is
+      only crash protection: browser storage is cleared by "clear browsing data", tied to one
+      profile on one machine, and invisible to git. So the file island also opens and saves
+      real `.mmd` files through the File System Access API — cmd+S writes back to the file
+      you opened, in place, and the diagram lives in a git repo rather than in a browser.
+      **This half is Chrome and Edge only**; elsewhere the island is hidden and the shortcuts
+      do nothing, because there is no equivalent API to fall back to. Autosave works
+      everywhere.
+
 Not done yet, roughly in the order I would take them:
 
-- [ ] **Autosave.** A debounced write of the source to `localStorage`, read back on startup,
-      falling back to the sample document. No UI. This is only crash protection — the undo
-      history does not survive a reload either way — and it is deliberately separate from the
-      item below, because browser storage is the wrong home for work you care about: it is
-      cleared by "clear browsing data", tied to one profile on one machine, and invisible to
-      git, which is the whole reason to keep diagrams as `.mmd`.
-- [ ] **Open and save `.mmd` files.** Where the browser has the File System Access API, this
-      is a real Save: open a file, edit it, and cmd+S writes back to that same file, so the
-      diagram lives in a git repo rather than in a browser. Elsewhere it degrades to a
-      download and a file input, which is Export rather than Save — every save lands a fresh
-      copy in the downloads folder. Two code paths for one job is a real cost and the
-      fallback is the half that will rot; it is deliberate, so that the tool is not
-      Chrome-only.
 - [ ] **A library of past diagrams, if it is still wanted afterwards.** A panel listing
       what you have worked on. Deliberately last, because once files work the filesystem is
       already the library, with names, folders, backups and history. If it is built: name
@@ -177,6 +175,16 @@ offering connection points — four points would imply a choice that cannot be e
 - **Deleting a node listed in a shared `class` line takes the whole line.** `class A,B big`
   names two nodes; deleting A removes the statement, so B quietly loses its class. Splitting
   the id list would fix it. Not reachable from the canvas, since nothing writes `class`.
+- **Undo restores text, never the file you were in.** The document lives in CodeMirror's
+  history; which file it came from is React state and is not in that history. So cmd+Z after
+  New brings the diagram back but leaves you on `Untitled`, and Save will ask where to put it.
+  Undo also reaches back past an Open, and Save writes whatever is on screen — which is
+  consistent, but means undoing blindly after opening a file can put the previous document
+  into it. The name and the `*` marker are always showing what would be written.
+- **The file you opened is forgotten on reload.** Handles are not persisted, so after a
+  refresh you have your text back from autosave but Save asks for a location again.
+  `FileSystemFileHandle` can be stored in IndexedDB and re-permissioned, which is the fix if
+  this becomes annoying.
 - **Deleting an edge does not renumber `linkStyle`.** `linkStyle` addresses edges by index,
   so removing one shifts every later index and the styling lands on the wrong edge. Nothing
   in the canvas writes `linkStyle`, so this only bites a hand-written document.

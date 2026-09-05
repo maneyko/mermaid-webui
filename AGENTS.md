@@ -36,13 +36,21 @@ bun run build      # typecheck, then production build
 Vite never invokes `tsc` — it strips types in its own pipeline. So a type error will **not**
 fail `bun run dev`. Run `bun run typecheck` explicitly.
 
+## Browser support
+
+Everything works in any modern browser except opening and saving files, which needs the File
+System Access API and so is Chrome and Edge only. That was a deliberate choice over shipping a
+download/upload fallback beside it: two code paths for one job, and the fallback would be the
+half nobody exercises. Autosave covers the rest of the world.
+
 ## Layout
 
 ```
 index.html
 src/main.tsx            React root
-src/App.tsx             owns the source string, nothing else
+src/App.tsx             owns the source string and which file it came from
 src/CodePane.tsx        CodeMirror 6 editor, controlled
+src/storage.ts          autosave, and opening and saving real .mmd files
 src/Canvas.tsx          mermaid render, selection, renaming, gesture policy
 src/usePanZoom.ts       the viewport: pan drag, wheel zoom, fit
 src/Toolbar.tsx         the floating islands and the Tool type
@@ -347,6 +355,35 @@ The UI half has two traps worth keeping:
   text box silently rewriting the whole diagram.
 - While the editor *does* have focus the listener returns without preventing anything, so
   CodeMirror handles it once. Check this after touching it -- the failure is a double undo.
+
+### Files and autosave
+
+`src/storage.ts` is the only place that talks to anything durable. Two unrelated jobs live
+there because they answer the same question badly apart: `localStorage` so a refresh does not
+cost you the diagram, and the File System Access API so the `.mmd` can live in a git repo.
+
+- **Autosave writes on every change, undebounced.** A few KB through `setItem` costs
+  microseconds and a timer would be more machinery than the problem. It is wrapped in
+  `try/catch` for one specific reason: Safari's private mode throws on `localStorage`, and an
+  exception out of an effect that runs on every keystroke takes the whole app down. Losing
+  autosave is the better half of that trade.
+- **TypeScript's DOM lib has `FileSystemFileHandle` but not `showOpenFilePicker` or
+  `showSaveFilePicker`.** They are declared in `storage.ts`, as optional members, so the
+  optionality is what carries "this is Chrome-only" through the type system.
+- **Where the API is missing the island is not rendered at all**, rather than shown disabled.
+  Islands hold controls that work, and there is no half of Open/Save that does anything.
+- **Closing a picker rejects with `AbortError`.** That is the user saying no, not a failure;
+  every other rejection is rethrown.
+- **A failed save is visible through the `*` marker, and that is the whole error handling.**
+  `savedSource` is only updated after the write resolves, so a write that throws leaves the
+  marker up rather than letting the save look like it worked. Do not add a toast for this.
+- **Undo restores text, never file state.** The document is CodeMirror's and the handle is
+  React's, and only the first is in the history — see the README's known issues. Resist tying
+  them together; the history has no notion of anything but the document.
+- The pickers open a native dialog, which browser automation cannot drive and which blocks
+  the extension. Test this path by stubbing `window.showOpenFilePicker` and
+  `showSaveFilePicker` in the page with fakes that return a handle object; everything below
+  the picker is our code and gets exercised properly that way.
 
 ### Testing interactions
 
