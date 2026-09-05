@@ -151,6 +151,30 @@ body {
   outline: 3px solid var(--select);
 }
 
+/* The edge itself is a 1px stroke and hopeless to click, so hit-testing goes to a wide
+   transparent twin behind it and the visible line answers no pointer queries at all. */
+.diagram path.flowchart-link {
+  pointer-events: none;
+}
+
+.diagram path.edge-handle {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14px;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.diagram path.flowchart-link.connect-target {
+  stroke: var(--select) !important;
+  stroke-width: 2.5px !important;
+}
+
+.diagram path.flowchart-link.selected {
+  stroke: var(--select) !important;
+  stroke-width: 4px !important;
+}
+
 .canvas.tool-arrow,
 .canvas.tool-arrow .diagram g.node,
 .canvas.tool-shape,

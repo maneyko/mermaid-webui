@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import CodePane, { type Range } from './CodePane'
 import Canvas, { type EditTarget } from './Canvas'
-import { findEdgeLabels, findNodes } from './correlate'
+import { findEdgeLabels, findEdges, findNodes } from './correlate'
 import {
   addConnectedNode,
   addStandaloneNode,
   connectNodes,
+  deleteEdge,
   deleteNode,
   renameEdgeLabel,
   renameLabel,
@@ -25,10 +26,14 @@ export default function App() {
   const [selected, setSelected] = useState<EditTarget | null>(null)
   const [reveal, setReveal] = useState<Range | null>(null)
 
-  // A node reveals its whole declaration; an edge label reveals the text between its pipes,
-  // which is the only part of that statement the label owns.
+  // A node reveals its whole declaration, an edge label the text between its pipes, and an
+  // edge the pair of nodes it joins -- which for `A --> B --> C` is the half you clicked.
   const spanOf = (target: EditTarget): Range | null => {
-    if (target.kind === 'edge') return findEdgeLabels(source)[target.index] ?? null
+    if (target.kind === 'edgeLabel') return findEdgeLabels(source)[target.index] ?? null
+    if (target.kind === 'edge') {
+      const edge = findEdges(source)[target.index]
+      return edge === undefined ? null : { from: edge.from, to: edge.to }
+    }
     const node = findNodes(source).get(target.nodeId)
     return node === undefined ? null : { from: node.from, to: node.to }
   }
@@ -89,8 +94,12 @@ export default function App() {
           setReveal(null)
           return added.nodeId
         }}
-        onDelete={(nodeId) => {
-          setSource(deleteNode(source, nodeId))
+        onDelete={(target) => {
+          setSource(
+            target.kind === 'node'
+              ? deleteNode(source, target.nodeId)
+              : deleteEdge(source, target.index),
+          )
           setSelected(null)
           setReveal(null)
         }}

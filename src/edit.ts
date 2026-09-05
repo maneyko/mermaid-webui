@@ -2,7 +2,15 @@
 // the smallest possible edit applied: byte ranges outside the span being changed must come
 // back identical, because the user hand-edits this text and keeps it in git.
 
-import { findEdgeLabels, findNodes, findStatements, type Span, type Statement } from './correlate'
+import {
+  findEdgeLabels,
+  findEdges,
+  findNodes,
+  findStatements,
+  type NodeSpan,
+  type Span,
+  type Statement,
+} from './correlate'
 
 // Anything that would terminate a shape early, or that mermaid reads as syntax inside one.
 const NEEDS_QUOTING = /["[\]{}()|<>]/
@@ -194,7 +202,11 @@ export function deleteNode(source: string, nodeId: string): string {
     if (statement.keyword === null) {
       for (const node of statement.nodes) {
         const here = key(statement.scope, node.id)
-        if (node.id === nodeId || surviving.has(here) || rescued.has(here)) continue
+        if (node.id === nodeId || rescued.has(here)) continue
+        // A labelled occurrence is where the node's label lives, so it has to come back even
+        // when the id itself survives: every other mention may be a bare reference, and
+        // letting this one go strips the label off a node nobody asked to change.
+        if (surviving.has(here) && node.labelFrom === null) continue
         rescued.add(here)
         const declaration = declarations.get(node.id)
         lost.push(
@@ -215,6 +227,50 @@ export function deleteNode(source: string, nodeId: string): string {
   }
 
   return result
+}
+
+export function edgeCount(source: string): number {
+  return findEdges(source).length
+}
+
+// Deleting an edge splits the statement that carried it, rather than removing it: the halves
+// either side of the link are still chains, and `A --> B --> C` losing its first edge has to
+// leave `B --> C` behind. A half that is a single node is dropped when it is only a bare
+// reference to a node mentioned elsewhere, and kept when dropping it would lose the node or
+// its label.
+export function deleteEdge(source: string, index: number): string {
+  const edge = findEdges(source)[index]
+  if (edge === undefined) return source
+
+  const { statement, position } = edge
+  const elsewhere = new Set(
+    findStatements(source)
+      // Compared by offset, not identity: `statement` came out of the scan inside findEdges,
+      // so the object here that stands for the same statement is a different one.
+      .filter(
+        (other) =>
+          other.keyword === null &&
+          other.from !== statement.from &&
+          other.scope === statement.scope,
+      )
+      .flatMap((other) => other.nodes.map((node) => node.id)),
+  )
+
+  const parts: string[] = []
+  for (const half of [statement.nodes.slice(0, position), statement.nodes.slice(position)]) {
+    const first = half[0] as NodeSpan
+    const last = half[half.length - 1] as NodeSpan
+    if (half.length === 1 && first.labelFrom === null && elsewhere.has(first.id)) continue
+    parts.push(source.slice(first.from, last.to))
+    for (const node of half) elsewhere.add(node.id)
+  }
+
+  const span = parts.length === 0 ? removalSpan(source, statement) : statement
+  return (
+    source.slice(0, span.from) +
+    parts.join(`\n${indentOf(source, statement.from)}`) +
+    source.slice(span.to)
+  )
 }
 
 export function renameLabel(source: string, nodeId: string, label: string): string {

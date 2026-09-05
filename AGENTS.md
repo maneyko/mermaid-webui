@@ -71,7 +71,7 @@ internals are not a public API.
 
 ### Correlating rendered SVG back to source
 
-This is what selection is built on. Half of it is solved:
+This is what selection is built on.
 
 - **Nodes** are `g.node` elements with
   `id="<renderId>-flowchart-<nodeId>-<n>"`, e.g. `mermaid-2-flowchart-A-0`.
@@ -79,9 +79,11 @@ This is what selection is built on. Half of it is solved:
   `<n>` is an internal entity counter that also advances for edges, so it is **not** a node
   index — in a six-node chart the nodes came out `-0, -1, -3, -5, -7, -9`. Parse the id
   segment; never trust the counter.
-- **Edges** are `path.flowchart-link` elements carrying `data-id="L_A_B_0"`. Source and
-  target node ids are right there in the attribute.
 - Nodes carry no `data-id` or `data-node-id`. The `id` attribute is the only handle.
+- **Edges** are `path.flowchart-link` inside `g.edgePaths`, emitted in declaration order.
+  They are addressed by position for the same reason edge labels are: the number in
+  `data-id="L_A_B_0"` counts entities, not pairs, so it is no more a per-edge index than the
+  node counter is. The same count guard applies.
 
 Going from an entity id to a *source text span* is solved in `src/correlate.ts`. The
 flowchart parser keeps no position information, so `flowDb` cannot supply it; `findNodes`
@@ -273,11 +275,15 @@ recompute the spans, not carry them across.
 
 `deleteNode` removes every statement naming the node and nothing else, which is the standard
 graph-editor rule but not the standard *text* rule, because mermaid declares most nodes
-inside an edge statement. Four things it turns on:
+inside an edge statement. Five things it turns on:
 
 - **A neighbour whose only declaration was on a removed line is re-emitted in its place**,
   from `findNodes`, so it keeps its shape and label. In place rather than appended, because
   appending would move it out of its subgraph and to the bottom of the file.
+- **Presence of the id is not the test for that; presence of its declaration is.** Rescuing
+  only when the id disappears entirely stripped labels off nodes nobody had touched: deleting
+  C from `A[Christmas] --> C` plus `A --> B` left A bare, because A was still mentioned on
+  the second line. A labelled occurrence has to come back even when the id survives.
 - **Survival is keyed by `(scope, id)`, not by id.** This was found by a failing test, not by
   reasoning: deleting `A` from `subgraph Box / A --> B / end` with a later `B --> C` outside
   left the box empty and B outside it. B still existed, so a global check said "survives" —
@@ -291,7 +297,29 @@ inside an edge statement. Four things it turns on:
   are worked out front to back for that reason and applied back to front so earlier offsets
   stay valid.
 
-The UI half has one trap worth keeping:
+`deleteEdge` is a different shape, because an edge is not a statement. Deleting one *splits*
+the statement that carried it: the halves either side of the link are still chains, and
+`A --> B --> C` losing its first edge has to leave `B --> C` behind. A half of a single node
+is dropped only when it is a bare reference to a node mentioned elsewhere in the same scope --
+keeping it otherwise is what stops the node, or its label, going with the edge.
+
+- **`findEdges` reads an edge as the link between consecutive node references**, which is
+  right for chains and wrong for `A & B --> C`, where mermaid makes two edges into C rather
+  than a chain of two. The `isLink` check rejects the `&` and drops the whole statement, so
+  the count disagrees and the caller declines. Verified against mermaid 11.17.2, along with
+  the `A -- text --> B` inline form, which over-counts instead and declines the same way.
+- **`x` and `o` are arrowheads and node ids both.** `A --x B` used to scan `x` as a node,
+  which put a phantom in `findNodes` and made the edge count wrong. What tells them apart is
+  sitting hard against the link: `A --> x` is a node.
+- **`statement` on an `EdgeSpan` comes from the scan inside `findEdges`**, so code that scans
+  again cannot compare statements by identity. Compare `from` offsets.
+
+The UI half has two traps worth keeping:
+
+- **A 1px stroke is not clickable.** Each edge gets a wide transparent twin (`path.edge-handle`)
+  inserted behind it to be the hit target, rebuilt with the SVG on every render, and the
+  visible link is set `pointer-events: none` so the topmost thing under the cursor is always
+  the handle rather than sometimes the line.
 
 - **A click used to open the node's rename box, and that box swallowed Delete.** The keyboard
   binding looked right in review and was unreachable in the app: clicking the node to select

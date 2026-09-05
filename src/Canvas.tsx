@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import { nodeIdFromElement } from './correlate'
-import { edgeLabelCount, edgeLabelOf, labelOf, SHAPES, type Shape } from './edit'
+import { edgeCount, edgeLabelCount, edgeLabelOf, labelOf, SHAPES, type Shape } from './edit'
 import { usePanZoom } from './usePanZoom'
 import Toolbar, { type Tool } from './Toolbar'
 
@@ -43,6 +43,23 @@ function renderedEdgeLabels(container: HTMLDivElement | null): Element[] {
   )
 }
 
+function renderedEdges(container: HTMLDivElement | null): Element[] {
+  return [...(container?.querySelectorAll('g.edgePaths > path.flowchart-link') ?? [])]
+}
+
+// A rendered edge is a 1px stroke, which nobody can be asked to click. Each one gets a wide
+// transparent twin behind it to be the hit target, rebuilt with the SVG on every render.
+function addEdgeHandles(container: HTMLDivElement) {
+  for (const edge of renderedEdges(container)) {
+    const handle = edge.cloneNode() as SVGPathElement
+    handle.setAttribute('class', 'edge-handle')
+    handle.removeAttribute('id')
+    handle.removeAttribute('marker-end')
+    handle.removeAttribute('marker-start')
+    edge.parentNode?.insertBefore(handle, edge)
+  }
+}
+
 function mark(container: HTMLDivElement | null, className: string, target: EditTarget | null) {
   if (container === null) return
 
@@ -52,7 +69,11 @@ function mark(container: HTMLDivElement | null, className: string, target: EditT
   }
 
   renderedEdgeLabels(container).forEach((label, index) => {
-    label.classList.toggle(className, target?.kind === 'edge' && target.index === index)
+    label.classList.toggle(className, target?.kind === 'edgeLabel' && target.index === index)
+  })
+
+  renderedEdges(container).forEach((edge, index) => {
+    edge.classList.toggle(className, target?.kind === 'edge' && target.index === index)
   })
 }
 
@@ -67,12 +88,23 @@ function edgeLabelIndex(element: Element, source: string, container: HTMLDivElem
   return index === -1 ? null : index
 }
 
+// Edges are addressed the same way and for the same reason: `data-id` counts entities rather
+// than pairs, so position is the only key. A count the scanner disagrees with means syntax it
+// does not model -- the `&` list form -- and the edit is declined rather than aimed at random.
+function edgeIndex(handle: Element, source: string, container: HTMLDivElement | null) {
+  const handles = [...(container?.querySelectorAll('path.edge-handle') ?? [])]
+  if (handles.length !== edgeCount(source)) return null
+  const index = handles.indexOf(handle)
+  return index === -1 ? null : index
+}
+
 // Hover runs on every pointer move, so an unchanged target has to compare equal or React
 // re-renders the canvas continuously.
 function sameTarget(a: EditTarget | null, b: EditTarget | null): boolean {
   if (a === null || b === null) return a === b
-  if (a.kind === 'node' && b.kind === 'node') return a.nodeId === b.nodeId
-  return a.kind === 'edge' && b.kind === 'edge' && a.index === b.index
+  if (a.kind === 'node') return b.kind === 'node' && a.nodeId === b.nodeId
+  if (b.kind === 'node') return false
+  return a.kind === b.kind && a.index === b.index
 }
 
 // Shortcuts must not fire while the user is typing in the editor or the rename overlay.
@@ -80,10 +112,24 @@ function isTyping(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('input, textarea, [contenteditable="true"]') !== null
 }
 
-export type EditTarget = { kind: 'node'; nodeId: string } | { kind: 'edge'; index: number }
+// `edge` is the connection itself and `edgeLabel` the text riding on it -- two separate
+// things to click, and the vocabulary rule above says which word means which.
+export type EditTarget =
+  | { kind: 'node'; nodeId: string }
+  | { kind: 'edge'; index: number }
+  | { kind: 'edgeLabel'; index: number }
+
+// An edge carries no label of its own to rename, and an edge label is not a thing you delete:
+// clearing its text is a rename.
+export type Renameable = Exclude<EditTarget, { kind: 'edge' }>
+export type Deletable = Exclude<EditTarget, { kind: 'edgeLabel' }>
+
+export function deletable(target: EditTarget | null): Deletable | null {
+  return target === null || target.kind === 'edgeLabel' ? null : target
+}
 
 interface Editing {
-  target: EditTarget
+  target: Renameable
   value: string
   original: string
   left: number
@@ -113,7 +159,7 @@ interface CanvasProps {
   onSetShape: (nodeId: string, shape: Shape) => void
   onAddNode: (fromId: string, shape: Shape) => string
   onAddStandalone: (shape: Shape) => string
-  onDelete: (nodeId: string) => void
+  onDelete: (target: Deletable) => void
 }
 
 export default function Canvas({
@@ -168,7 +214,8 @@ export default function Canvas({
     return id === null ? null : { element, id }
   }
 
-  // Everything the select tool acts on: a node, or an edge label the scanner can place.
+  // Everything the select tool acts on: a node, an edge label, or an edge. Checked in that
+  // order, which is also how they are stacked, so the topmost thing under the cursor wins.
   const targetAt = (clientX: number, clientY: number) => {
     const hit = document.elementFromPoint(clientX, clientY)
     if (hit == null) return null
@@ -180,12 +227,24 @@ export default function Canvas({
     }
 
     const label = hit.closest('g.edgeLabel')
-    if (label === null) return null
-    const index = edgeLabelIndex(label, source, diagram.current)
-    return index === null ? null : { element: label, target: { kind: 'edge', index } as EditTarget }
+    if (label !== null) {
+      const index = edgeLabelIndex(label, source, diagram.current)
+      return index === null
+        ? null
+        : { element: label, target: { kind: 'edgeLabel', index } as EditTarget }
+    }
+
+    const handle = hit.closest('path.edge-handle')
+    if (handle === null) return null
+    const index = edgeIndex(handle, source, diagram.current)
+    return index === null ? null : { element: handle, target: { kind: 'edge', index } as EditTarget }
   }
 
-  const labelFor = (target: EditTarget) =>
+  // An edge has nothing of its own to rename, so a double-click on one does nothing.
+  const renameable = (target: EditTarget): Renameable | null =>
+    target.kind === 'edge' ? null : target
+
+  const labelFor = (target: Renameable) =>
     target.kind === 'node' ? labelOf(source, target.nodeId) : edgeLabelOf(source, target.index)
 
   const hover = (next: EditTarget | null) =>
@@ -196,13 +255,14 @@ export default function Canvas({
 
   // The shape buttons and delete act on a node; an edge label is selectable but is not one.
   const selectedNode = selected?.kind === 'node' ? selected.nodeId : null
+  const selectedTarget = deletable(selected)
 
   const centreOf = (element: Element): Point => {
     const bounds = element.getBoundingClientRect()
     return toFrame(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)
   }
 
-  const openEditorOn = (element: Element, target: EditTarget, label: string) => {
+  const openEditorOn = (element: Element, target: Renameable, label: string) => {
     if (frame.current === null) return
     const bounds = element.getBoundingClientRect()
     const frameBounds = frame.current.getBoundingClientRect()
@@ -241,6 +301,7 @@ export default function Canvas({
         if (stale) return
         if (diagram.current !== null) {
           diagram.current.innerHTML = svg
+          addEdgeHandles(diagram.current)
           mark(diagram.current, 'selected', latestSelected.current)
           mark(diagram.current, 'connect-target', latestHovered.current)
 
@@ -285,10 +346,10 @@ export default function Canvas({
       if (event.key === 'h') setTool('hand')
       if (event.key === '2' || event.key === 'a') setTool('arrow')
 
-      const current = latestSelected.current
-      if ((event.key === 'Backspace' || event.key === 'Delete') && current?.kind === 'node') {
+      const current = deletable(latestSelected.current)
+      if ((event.key === 'Backspace' || event.key === 'Delete') && current !== null) {
         event.preventDefault()
-        latestDelete.current(current.nodeId)
+        latestDelete.current(current)
       }
 
       const shapeIndex = ['3', '4', '5', '6'].indexOf(event.key)
@@ -411,7 +472,9 @@ export default function Canvas({
         if (tool !== 'select') return
         const found = targetAt(event.clientX, event.clientY)
         if (found === null) return
-        openEditorOn(found.element, found.target, labelFor(found.target))
+        const target = renameable(found.target)
+        if (target === null) return
+        openEditorOn(found.element, target, labelFor(target))
       }}
     >
       <div
@@ -437,9 +500,10 @@ export default function Canvas({
         onToolChange={setTool}
         shape={shape}
         onPickShape={pickShape}
-        hasSelection={selectedNode !== null}
+        hasNodeSelection={selectedNode !== null}
+        canDelete={selectedTarget !== null}
         onDelete={() => {
-          if (selectedNode !== null) onDelete(selectedNode)
+          if (selectedTarget !== null) onDelete(selectedTarget)
         }}
         scale={view.scale}
         onZoomIn={panZoom.zoomIn}

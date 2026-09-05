@@ -7,7 +7,8 @@ interface ToolbarProps {
   onToolChange: (tool: Tool) => void
   shape: Shape
   onPickShape: (shape: Shape) => void
-  hasSelection: boolean
+  hasNodeSelection: boolean
+  canDelete: boolean
   onDelete: () => void
   scale: number
   onZoomIn: () => void
@@ -124,7 +125,8 @@ export default function Toolbar({
   onToolChange,
   shape,
   onPickShape,
-  hasSelection,
+  hasNodeSelection,
+  canDelete,
   onDelete,
   scale,
   onZoomIn,
@@ -165,10 +167,10 @@ export default function Toolbar({
             key={each.name}
             type="button"
             className={tool === 'shape' && shape.name === each.name ? 'tool active' : 'tool'}
-            aria-label={hasSelection ? `Make selection a ${each.name}` : `${each.name} tool`}
+            aria-label={hasNodeSelection ? `Make selection a ${each.name}` : `${each.name} tool`}
             aria-pressed={tool === 'shape' && shape.name === each.name}
             title={
-              hasSelection
+              hasNodeSelection
                 ? `Change the selected node to a ${each.name.toLowerCase()}`
                 : `${each.name} (${SHAPE_SHORTCUTS[position]}) -- drag from a node to add one`
             }
@@ -181,14 +183,12 @@ export default function Toolbar({
 
         <span className="separator" />
 
-        {/* Clicking a node opens its rename box, which swallows the Delete key, so the
-            keyboard shortcut alone would leave this unreachable by the ordinary gesture. */}
         <button
           type="button"
           className="tool"
-          disabled={!hasSelection}
+          disabled={!canDelete}
           aria-label="Delete selection"
-          title="Delete the selected node and its edges (Delete)"
+          title="Delete the selected node or edge (Delete)"
           onClick={onDelete}
         >
           <TrashIcon />

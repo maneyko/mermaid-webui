@@ -3,7 +3,9 @@ import {
   addConnectedNode,
   addStandaloneNode,
   connectNodes,
+  deleteEdge,
   deleteNode,
+  edgeCount,
   nextNodeId,
   setNodeShape,
   SHAPES,
@@ -342,4 +344,80 @@ test('what delete writes is readable back by the scanner', () => {
   A[Christmas] -->|Get money| B(Go shopping)
   E[iPhone]
 `)
+})
+
+// The label lives on the declaration, so a surviving bare mention elsewhere is not enough to
+// let the declaration go with the statement.
+test('a node keeps its label when only a bare mention of it survives', () => {
+  const source = 'flowchart TD\n  A[Christmas] --> C\n  A --> B\n'
+  expect(deleteNode(source, 'C')).toBe('flowchart TD\n  A[Christmas]\n  A --> B\n')
+})
+
+test('counts one edge per link, and a chain as one edge per arrow', () => {
+  expect(edgeCount(HUB)).toBe(4)
+  expect(edgeCount('flowchart TD\n  A --> B --> C\n')).toBe(2)
+  expect(edgeCount('flowchart TD\n  A[Only]\n')).toBe(0)
+})
+
+// Verified against mermaid 11.17.2: it renders two edges for each of these, but not the two
+// this scanner would guess, so the count has to disagree and the caller decline.
+test('declines to count syntax it does not model', () => {
+  expect(edgeCount('flowchart TD\n  A & B --> C\n')).toBe(0)
+  expect(edgeCount('flowchart TD\n  A --> B & C\n')).toBe(0)
+})
+
+test('counts the arrow shapes mermaid accepts', () => {
+  expect(edgeCount('flowchart TD\n  A -.-> B\n  B ==> C\n  C --x D\n  D <--> E\n  E ~~~ F\n')).toBe(5)
+})
+
+test('an edge label containing a pipe does not break the link', () => {
+  expect(edgeCount('flowchart TD\n  A -->|"yes|no"| B\n')).toBe(1)
+})
+
+test('deleting an edge keeps both nodes when each carries its label', () => {
+  const source = 'flowchart TD\n  A[Christmas] -->|Get money| B(Go shopping)\n'
+  expect(deleteEdge(source, 0)).toBe('flowchart TD\n  A[Christmas]\n  B(Go shopping)\n')
+})
+
+test('deleting an edge removes the line when both nodes live elsewhere', () => {
+  const source = 'flowchart TD\n  A[One] --> B[Two]\n  A --> B\n'
+  expect(deleteEdge(source, 1)).toBe('flowchart TD\n  A[One] --> B[Two]\n')
+})
+
+test('deleting the first edge of a chain leaves the rest of the chain', () => {
+  expect(deleteEdge('flowchart TD\n  A --> B --> C\n', 0)).toBe('flowchart TD\n  A\n  B --> C\n')
+})
+
+test('deleting the last edge of a chain leaves the rest of the chain', () => {
+  expect(deleteEdge('flowchart TD\n  A --> B --> C\n', 1)).toBe('flowchart TD\n  A --> B\n  C\n')
+})
+
+test('deleting one edge of a hub leaves the others alone', () => {
+  expect(deleteEdge(HUB, 2)).toBe(`flowchart TD
+  A[Christmas] -->|Get money| B(Go shopping)
+  B --> C{Let me think}
+  D[Laptop]
+  C -->|Two| E[iPhone]
+`)
+})
+
+test('deleting a self-connection keeps the node once', () => {
+  expect(deleteEdge('flowchart TD\n  A --> A\n', 0)).toBe('flowchart TD\n  A\n')
+})
+
+test('a split half stays inside its subgraph', () => {
+  const source = 'flowchart TD\n  subgraph Box\n    A --> B\n  end\n'
+  expect(deleteEdge(source, 0)).toBe('flowchart TD\n  subgraph Box\n    A\n    B\n  end\n')
+})
+
+test('an out-of-range edge index leaves the source untouched', () => {
+  expect(deleteEdge(HUB, 9)).toBe(HUB)
+})
+
+test('what deleting an edge writes is readable back by the scanner', () => {
+  const next = deleteEdge(HUB, 0)
+  expect(labelOf(next, 'A')).toBe('Christmas')
+  expect(labelOf(next, 'B')).toBe('Go shopping')
+  expect(edgeCount(next)).toBe(3)
+  expect(edgeLabelCount(next)).toBe(2)
 })

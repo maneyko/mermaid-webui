@@ -135,6 +135,13 @@ test('statements know which subgraph encloses them', () => {
   expect(statements.map((s) => s.scope)).toEqual([-1, -1, 1, -1, -1])
 })
 
+// x and o are arrowheads hard against the link, and ordinary node ids anywhere else.
+test('does not mistake an arrowhead for a node', () => {
+  expect([...findNodes('flowchart TD\n  A --x B\n').keys()]).toEqual(['A', 'B'])
+  expect([...findNodes('flowchart TD\n  A --o B\n').keys()]).toEqual(['A', 'B'])
+  expect([...findNodes('flowchart TD\n  A --> x\n').keys()]).toEqual(['A', 'x'])
+})
+
 test('sibling subgraphs are different scopes', () => {
   const source = 'flowchart TD\n  subgraph One\n    A\n  end\n  subgraph Two\n    B\n  end\n'
   const statements = findStatements(source)

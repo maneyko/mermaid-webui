@@ -4,11 +4,11 @@ A drag-and-drop WYSIWYG editor for [mermaid](https://mermaid.js.org) diagrams. C
 the left, live diagram on the right, tool picker on top. Runs entirely in the browser with no
 backend.
 
-**Status: it edits.** Click a node or an edge label to select it, double-click to rename it in
-place; drag between nodes to connect them; drag out from one to add a new node; pick a shape to
-restyle what is selected; delete a node and its edges; undo from anywhere with cmd+Z. Every
-change rewrites the source with the smallest possible edit. What is missing is deleting an edge
-on its own, and saving your work. See [Work items](#work-items).
+**Status: it edits.** Click a node, an edge or an edge label to select it, double-click to
+rename it in place; drag between nodes to connect them; drag out from one to add a new node;
+pick a shape to restyle what is selected; delete a node or an edge; undo from anywhere with
+cmd+Z. Every change rewrites the source with the smallest possible edit. What is missing is
+saving your work. See [Work items](#work-items).
 
 ## Why this is not a whiteboard
 
@@ -113,13 +113,15 @@ viable at all; everything before it was chrome.
       canvas, so a misjudged delete or drag takes one keystroke to take back. Canvas edits
       were always in the history; only the keymap's scope was in the way.
 
+- [x] **12. Delete an edge.** Edges are selectable in their own right now: each one gets a
+      wide transparent twin behind it to be the hit target, because a 1px stroke is not
+      something anyone can click. Deleting one *splits* the statement that carried it rather
+      than removing the statement, so `A --> B --> C` losing its first edge leaves `B --> C`
+      standing. A half that is only a bare reference to a node mentioned elsewhere is dropped;
+      one that would take a node or its label with it is kept.
+
 Not done yet, roughly in the order I would take them:
 
-- [ ] **Delete an edge.** Only whole nodes can be deleted so far. An edge is only selectable
-      through its label, and an unlabelled edge has no clickable target at all. Needs
-      hit-testing on the `path.flowchart-link` elements and a ring that can highlight one. The
-      source half is mostly done — removing an edge orphans nodes exactly the way removing a
-      node does, and `deleteNode` already has that machinery.
 - [ ] **The other structural drags.** Reorder siblings by dragging one past another, and
       reparent a node by dragging it into a subgraph. Reparenting needs subgraph hit-testing,
       since subgraphs render as `g.cluster` and nothing selects those. The statement spans
@@ -151,6 +153,14 @@ offering connection points — four points would imply a choice that cannot be e
 - **Deleting a node listed in a shared `class` line takes the whole line.** `class A,B big`
   names two nodes; deleting A removes the statement, so B quietly loses its class. Splitting
   the id list would fix it. Not reachable from the canvas, since nothing writes `class`.
+- **Deleting an edge does not renumber `linkStyle`.** `linkStyle` addresses edges by index,
+  so removing one shifts every later index and the styling lands on the wrong edge. Nothing
+  in the canvas writes `linkStyle`, so this only bites a hand-written document.
+- **Selecting and deleting are declined on `A & B --> C`.** The scanner reads edges as the
+  links between consecutive node references, which is not what the `&` list form means, so it
+  reports a count mermaid disagrees with and every edge in the document stops responding to
+  clicks. Declining beats deleting the wrong edge; the same is true of the
+  `A -- text --> B` inline label form.
 
 ## Prior art
 

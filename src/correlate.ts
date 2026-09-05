@@ -167,6 +167,13 @@ export function findStatements(source: string): Statement[] {
       continue
     }
 
+    // The arrowheads of `A --x B` and `A --o B`. Both are also perfectly good node ids, so
+    // what separates them is sitting hard against the link with no space: `A --> x` is a node.
+    if ((id === 'x' || id === 'o') && '-.=~'.includes(source[index - 1] ?? '')) {
+      index = idEnd
+      continue
+    }
+
     const opener = source[idEnd]
     const closer = opener === undefined ? undefined : SHAPE_CLOSERS[opener]
     if (opener !== undefined && closer !== undefined) {
@@ -216,6 +223,56 @@ export function findNodes(source: string): Map<string, NodeSpan> {
 export interface Span {
   from: number
   to: number
+}
+
+export interface EdgeSpan extends Span {
+  linkFrom: number
+  linkTo: number
+  statement: Statement
+  position: number
+}
+
+// What can sit between two node references and still be one link, once any `|label|` is
+// taken out. Requiring two or more link characters is what rejects the `&` list form:
+// `A & B --> C` is two edges into C rather than a chain, and mermaid orders them in a way
+// this does not model, so the statement is dropped and the count guard declines the edit.
+const LINK = /^\s*[<xo]?[-.=~]{2,}[>xo]?\s*$/
+
+function isLink(text: string): boolean {
+  return LINK.test(text.replaceAll(/"[^"]*"/g, '').replaceAll(/\|[^|]*\|/g, ''))
+}
+
+// One edge per consecutive pair of node references in a statement, so `A --> B --> C` is two.
+// Deliberately no identity, for the same reason edge labels have none: callers pair the k-th
+// rendered `path.flowchart-link` with the k-th span here, having checked the counts agree.
+export function findEdges(source: string): EdgeSpan[] {
+  const edges: EdgeSpan[] = []
+
+  for (const statement of findStatements(source)) {
+    if (statement.keyword !== null) continue
+
+    const chain: EdgeSpan[] = []
+    for (let position = 1; position < statement.nodes.length; position += 1) {
+      const before = statement.nodes[position - 1] as NodeSpan
+      const after = statement.nodes[position] as NodeSpan
+      if (!isLink(source.slice(before.to, after.from))) {
+        chain.length = 0
+        break
+      }
+      chain.push({
+        from: before.from,
+        to: after.to,
+        linkFrom: before.to,
+        linkTo: after.from,
+        statement,
+        position,
+      })
+    }
+
+    edges.push(...chain)
+  }
+
+  return edges
 }
 
 // The text inside each `|...|` edge label, in declaration order. Node shapes and quoted
