@@ -3,13 +3,22 @@
 The role that deploys this repo onto a host: bun, a clone at `/opt/mermaid-webui`, `bun run
 build`, and the NGINX site that serves `dist/`.
 
-There is no service, no application user and no secret. The bundle is static files, so NGINX
-is the only thing that runs it, and `www-data` is the only account that needs to read it.
+There is no service and no application user. The bundle is static files, so NGINX is the only
+thing that runs it, and `www-data` is the only account that needs to read it.
 
-The site listens on `127.0.0.1:8080` and nowhere else. A Cloudflare Tunnel is what publishes
-it, which is the only arrangement under which Cloudflare Access actually gates it — a public
-listener would keep answering requests that skipped the edge. TLS is terminated by Cloudflare,
-so the vhost carries no certificate.
+## Two ways in
+
+| Block | Listens on | `server_name` |
+|---|---|---|
+| tunnel | `127.0.0.1:8080` | none; it is the only listener on that port |
+| public | `:443` via `default-cert.conf` | from `snippets/mermaid-webui.local.conf` |
+
+Cloudflare Access is enforced at Cloudflare's edge and nowhere else, so it only covers
+requests that arrive through it. Everything reaching the loopback block does, because there
+is no other route to it. The public block answers this host directly, so it does not.
+
+The two blocks must not share a name. One block listening on both addresses would serve the
+tunnel's name publicly as well, and that name's Access policy would become decoration.
 
 `requirements.yml`:
 
@@ -34,17 +43,20 @@ collection that only exists in a private git repo.
   roles:
     - role: maneyko.mermaid_webui.deploy
       vars:
-        config: "{{ app_config }}"
+        config:  "{{ app_config }}"
+        secrets: "{{ app_secrets }}"
 ```
 
-`config` is declared in `roles/deploy/meta/argument_specs.yaml` and validated before the role
-runs:
+`config` and `secrets` are declared in `roles/deploy/meta/argument_specs.yaml` and validated
+before the role runs:
 
     ansible-doc -t role maneyko.mermaid_webui.deploy   # collection installed
     ansible-doc -t role -r roles deploy                # from this repo
 
-The hostname is not passed in. It used to be, as a secret; behind Access that is not worth a
-Secret Manager round-trip.
+`secrets.nginx.local_conf` is where this host's own NGINX configuration goes. It must carry
+the public block's `server_name`, and it is written to `/etc/nginx/snippets/` rather than into
+the checkout, because what this host answers to is the caller's business and the repo does not
+ignore that path.
 
 `mermaid_webui_repo` in `roles/deploy/vars/main.yaml` is an SSH URL, so the play needs agent
 forwarding (`ansible_ssh_extra_args: "-A"`) and `SSH_AUTH_SOCK` kept across `sudo`. Override it
@@ -57,7 +69,7 @@ with an HTTPS URL to drop both requirements.
 3. Hands the checkout to `config.owner:www-data`, directories `2750`, files `g-w,o=`.
 4. Links `/usr/local/libexec/mermaid-webui/node` at the bun binary.
 5. `bun install --frozen-lockfile`, then `bun run build`.
-6. Links the vhost into `sites-enabled` and reloads NGINX.
+6. Links the vhost into `sites-enabled`, writes the secret snippet, reloads NGINX.
 
 ## node
 
