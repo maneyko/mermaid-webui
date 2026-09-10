@@ -36,7 +36,7 @@ The `#/ansible` fragment is the subdirectory the collection lives in — this re
 application that happens to ship its own deploy role, not a collection repo. `maneyko.roles` is
 listed because this role installs bun through `maneyko.roles.bun`; it is not a `galaxy.yml`
 dependency, because that would send `ansible-galaxy` to the public Galaxy server looking for a
-collection that only exists in a private git repo.
+collection that only exists in a git repo.
 
 ```yaml
 - hosts: all
