@@ -57,10 +57,12 @@ half nobody exercises. Autosave covers the rest of the world.
 `etc/nginx/mermaid-webui.conf` hardcodes `/opt/mermaid-webui/dist` because the role does too.
 Moving the checkout means editing both.
 
-It also `listen`s on `127.0.0.1:8080` rather than `:443`. Do not "fix" that: a Cloudflare
-Tunnel publishes the site and Cloudflare Access gates it, and Access is enforced at the edge
-only — the moment this binds a public address, anyone can reach the site by aiming a request
-at the host's IP with the right `Host` header, and the login page becomes decoration.
+It holds two server blocks and they are not interchangeable. The `127.0.0.1:8080` one is
+reached only through the Cloudflare Tunnel; the `:443` one answers the host's own address and
+takes its `server_name` from a snippet this repo never sees. Access is enforced at
+Cloudflare's edge only, so **never move a name from the tunnel block to the public one, and
+never merge the two** — that name would then answer requests that skipped the edge, and its
+Access policy would become decoration.
 
 ## Layout
 
