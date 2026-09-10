@@ -53,7 +53,7 @@ with an HTTPS URL to drop both requirements.
 1. Installs `maneyko.roles.bun` with `config.owner` in the bun group.
 2. Clones the repo to `/opt/mermaid-webui` at `config.version`, defaulting to `main`.
 3. Hands the checkout to `config.owner:www-data`, directories `2750`, files `g-w,o=`.
-4. `bun install --frozen-lockfile`, then `bun run build`, both as `config.owner`.
+4. `bun install --frozen-lockfile`, then `bun --bun run build`, both as `config.owner`.
 5. Links the vhost into `sites-enabled`, writes the secret snippet, reloads NGINX.
 
 ## Ownership

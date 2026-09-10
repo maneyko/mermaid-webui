@@ -38,12 +38,15 @@
     chdir: "{{ mermaid_webui_root }}"
     cmd: bun install --frozen-lockfile
 
+# --bun, or the build fails on `env: 'node': No such file or directory`. Both
+# node_modules/.bin/tsc and .../vite are `#!/usr/bin/env node`, and there is no
+# node on this host; the flag runs them under bun instead of honouring that.
 - name: Build mermaid-webui
   become_user: "{{ config.owner }}"
   changed_when: false
   command:
     chdir: "{{ mermaid_webui_root }}"
-    cmd: bun run build
+    cmd: bun --bun run build
 
 - name: Link mermaid-webui NGINX site
   notify: Reload NGINX
