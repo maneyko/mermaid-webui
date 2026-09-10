@@ -6,6 +6,10 @@
     bun_users: ["{{ config.owner }}"]
 
 - name: Clone mermaid-webui repo
+  # The vhost is a file in here, reached through a symlink that does not change
+  # when its target does -- so without this, a config.version bump deploys a new
+  # vhost and leaves NGINX running the old one.
+  notify: Reload NGINX
   # Set mermaid-webui permissions below hands the checkout to config.owner, so
   # root's git refuses it as dubious on every run after the first. The exception
   # is scoped to this task rather than written into the host's git config.
@@ -72,14 +76,3 @@
     state: link
     src:  "{{ mermaid_webui_root }}/etc/nginx/mermaid-webui.conf"
     dest: /etc/nginx/sites-enabled/mermaid-webui.conf
-
-# Written straight to the snippet rather than into the checkout: it is a secret,
-# and the repo does not ignore that path.
-- name: Write mermaid-webui NGINX local snippet
-  no_log: true
-  notify: Reload NGINX
-  copy:
-    content: "{{ secrets.nginx.local_conf }}"
-    dest: /etc/nginx/snippets/mermaid-webui.local.conf
-    group: www-data
-    mode: '0640'

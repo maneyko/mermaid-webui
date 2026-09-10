@@ -70,15 +70,20 @@ static files, and NGINX is the whole server.
   roles:
     - role: maneyko.mermaid_webui.deploy
       vars:
-        config:  "{{ app_config }}"
-        secrets: "{{ app_secrets }}"
+        config: "{{ app_config }}"
 ```
 
-The repo that owns the machine supplies a `server_name` and the user who owns the checkout, and
-knows nothing else about the layout. See [`ansible/README.md`](ansible/README.md).
+The repo that owns the machine supplies the user who owns the checkout, and knows nothing else
+about the layout. See [`ansible/README.md`](ansible/README.md).
+
+The site listens on `127.0.0.1:8080` and is published by a Cloudflare Tunnel, with Cloudflare
+Access in front of it. Nothing else can reach it, which is the point: Access is enforced at
+Cloudflare's edge, so an origin that also answered publicly would answer requests that never
+went through it.
 
 Saving files needs the File System Access API, which browsers gate on a secure context, so the
-site has to be served over HTTPS — `localhost` is the only exception.
+site has to be served over HTTPS — `localhost` is the only exception. Cloudflare terminates
+that TLS.
 
 ## Work items
 
