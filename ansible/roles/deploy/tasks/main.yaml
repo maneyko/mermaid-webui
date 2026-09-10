@@ -72,14 +72,3 @@
     state: link
     src:  "{{ mermaid_webui_root }}/etc/nginx/mermaid-webui.conf"
     dest: /etc/nginx/sites-enabled/mermaid-webui.conf
-
-# Written straight to the snippet rather than into the checkout: it is a secret,
-# and the repo does not ignore that path.
-- name: Write mermaid-webui NGINX local snippet
-  no_log: true
-  notify: Reload NGINX
-  copy:
-    content: "{{ secrets.nginx.local_conf }}"
-    dest: /etc/nginx/snippets/mermaid-webui.local.conf
-    group: www-data
-    mode: '0640'
