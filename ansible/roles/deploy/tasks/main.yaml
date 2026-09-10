@@ -1,0 +1,64 @@
+---
+- name: Install bun
+  include_role:
+    name: maneyko.roles.bun
+  vars:
+    bun_users: ["{{ config.owner }}"]
+
+- name: Clone mermaid-webui repo
+  # Set mermaid-webui permissions below hands the checkout to config.owner, so
+  # root's git refuses it as dubious on every run after the first. The exception
+  # is scoped to this task rather than written into the host's git config.
+  environment:
+    GIT_CONFIG_COUNT: '1'
+    GIT_CONFIG_KEY_0: safe.directory
+    GIT_CONFIG_VALUE_0: "{{ mermaid_webui_root }}"
+  git:
+    accept_hostkey: true
+    repo: "{{ mermaid_webui_repo }}"
+    version: "{{ config.version | default('main') }}"
+    dest: "{{ mermaid_webui_root }}"
+
+# NGINX reads dist/ through the group; nobody outside it reads the checkout at
+# all. Runs before the build, so node_modules and dist inherit www-data from
+# the setgid bit rather than being swept by the next apply.
+- name: Set mermaid-webui permissions
+  changed_when: false
+  shell: |
+    chown -R {{ config.owner }}:www-data {{ mermaid_webui_root }}
+    find {{ mermaid_webui_root }} -type d -exec chmod 2750 {} +
+    find {{ mermaid_webui_root }} -type f -exec chmod g-w,o= {} +
+
+# Frozen because bun.lock is in the repo: a host that resolves something else
+# is serving a bundle no checkout of this commit reproduces.
+- name: Install mermaid-webui dependencies
+  become_user: "{{ config.owner }}"
+  changed_when: false
+  command:
+    chdir: "{{ mermaid_webui_root }}"
+    cmd: bun install --frozen-lockfile
+
+- name: Build mermaid-webui
+  become_user: "{{ config.owner }}"
+  changed_when: false
+  command:
+    chdir: "{{ mermaid_webui_root }}"
+    cmd: bun run build
+
+- name: Link mermaid-webui NGINX site
+  notify: Reload NGINX
+  file:
+    state: link
+    src:  "{{ mermaid_webui_root }}/etc/nginx/mermaid-webui.conf"
+    dest: /etc/nginx/sites-enabled/mermaid-webui.conf
+
+# Written straight to the snippet rather than into the checkout: it is a secret,
+# and the repo does not ignore that path.
+- name: Write mermaid-webui NGINX local snippet
+  no_log: true
+  notify: Reload NGINX
+  copy:
+    content: "{{ secrets.nginx.local_conf }}"
+    dest: /etc/nginx/snippets/mermaid-webui.local.conf
+    group: www-data
+    mode: '0640'

@@ -1,0 +1,12 @@
+---
+namespace: maneyko
+name: mermaid_webui
+version: 1.0.0
+readme: README.md
+authors:
+  - maneyko
+description: Deploys mermaid-webui onto a host
+license:
+  - MIT
+build_ignore:
+  - '*.tar.gz'

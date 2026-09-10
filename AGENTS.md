@@ -43,6 +43,20 @@ System Access API and so is Chrome and Edge only. That was a deliberate choice o
 download/upload fallback beside it: two code paths for one job, and the fallback would be the
 half nobody exercises. Autosave covers the rest of the world.
 
+## Deploying
+
+`ansible/` vends `maneyko.mermaid_webui.deploy`, which clones the repo to a host and runs
+`bun run build` there. Two consequences:
+
+- **A type error fails the deploy.** `build` is `tsc --noEmit && vite build`, and `dev` does
+  not typecheck at all, so a change that runs fine locally can stop the host from serving.
+- **The lockfile is authoritative.** The role installs with `--frozen-lockfile`; committing a
+  `package.json` edit without the matching `bun.lock` breaks the deploy rather than resolving
+  something new on the host.
+
+`etc/nginx/mermaid-webui.conf` hardcodes `/opt/mermaid-webui/dist` because the role does too.
+Moving the checkout means editing both.
+
 ## Layout
 
 ```
@@ -62,6 +76,8 @@ src/edit.ts             minimal rewrites back into the source
 src/edit.test.ts        bun test
 src/mermaidLanguage.ts  syntax highlighting tokenizer
 src/styles.css          all styling
+etc/nginx/              the vhost the deploy role links into sites-enabled
+ansible/                the collection that deploys this: bun, clone, build, vhost
 ```
 
 Flat on purpose. `correlate.ts` (read) and `edit.ts` (write) are the pure half and the only

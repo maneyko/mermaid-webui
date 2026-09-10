@@ -58,6 +58,28 @@ bun run build      # typecheck, then production build into dist/
 bun run preview    # serve the production build
 ```
 
+## Deploying
+
+[`ansible/`](ansible/) is a collection holding one role, `maneyko.mermaid_webui.deploy`, which
+puts this on a host: bun, a clone at `/opt/mermaid-webui`, `bun run build`, and the NGINX site
+in [`etc/nginx/`](etc/nginx/) that serves `dist/`. There is nothing to run — the bundle is
+static files, and NGINX is the whole server.
+
+```yaml
+- hosts: all
+  roles:
+    - role: maneyko.mermaid_webui.deploy
+      vars:
+        config:  "{{ app_config }}"
+        secrets: "{{ app_secrets }}"
+```
+
+The repo that owns the machine supplies a `server_name` and the user who owns the checkout, and
+knows nothing else about the layout. See [`ansible/README.md`](ansible/README.md).
+
+Saving files needs the File System Access API, which browsers gate on a secure context, so the
+site has to be served over HTTPS — `localhost` is the only exception.
+
 ## Work items
 
 Done, in the order they were built. Item 4 was the one that decided whether the project was
