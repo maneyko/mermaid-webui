@@ -38,15 +38,33 @@
     chdir: "{{ mermaid_webui_root }}"
     cmd: bun install --frozen-lockfile
 
-# --bun, or the build fails on `env: 'node': No such file or directory`. Both
-# node_modules/.bin/tsc and .../vite are `#!/usr/bin/env node`, and there is no
-# node on this host; the flag runs them under bun instead of honouring that.
+# node_modules/.bin/tsc and .../vite are both `#!/usr/bin/env node`, and this
+# host has no node. bun runs node's entry points when it is invoked under that
+# name, the same trick maneyko.roles.bun uses for bunx. `bun --bun run build`
+# is the documented way to ask for it and works interactively, but silently
+# does nothing for root -- and root is who this runs as wherever the inventory
+# pins ansible_become_user, which outranks the become_user below.
+- name: Create the directory holding node for the build
+  file:
+    state: directory
+    path: "{{ mermaid_webui_libexec }}"
+    mode: '0755'
+
+- name: Point node at bun
+  file:
+    state: link
+    src:  "{{ mermaid_webui_bun_binary }}"
+    dest: "{{ mermaid_webui_libexec }}/node"
+
+# Only on PATH for the build: nothing else on this host should find a node.
 - name: Build mermaid-webui
   become_user: "{{ config.owner }}"
   changed_when: false
+  environment:
+    PATH: "{{ mermaid_webui_libexec }}:{{ ansible_env.PATH }}"
   command:
     chdir: "{{ mermaid_webui_root }}"
-    cmd: bun --bun run build
+    cmd: bun run build
 
 - name: Link mermaid-webui NGINX site
   notify: Reload NGINX

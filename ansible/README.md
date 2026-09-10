@@ -53,8 +53,29 @@ with an HTTPS URL to drop both requirements.
 1. Installs `maneyko.roles.bun` with `config.owner` in the bun group.
 2. Clones the repo to `/opt/mermaid-webui` at `config.version`, defaulting to `main`.
 3. Hands the checkout to `config.owner:www-data`, directories `2750`, files `g-w,o=`.
-4. `bun install --frozen-lockfile`, then `bun --bun run build`, both as `config.owner`.
-5. Links the vhost into `sites-enabled`, writes the secret snippet, reloads NGINX.
+4. Links `/usr/local/libexec/mermaid-webui/node` at the bun binary.
+5. `bun install --frozen-lockfile`, then `bun run build`.
+6. Links the vhost into `sites-enabled`, writes the secret snippet, reloads NGINX.
+
+## node
+
+`node_modules/.bin/tsc` and `.../vite` are both `#!/usr/bin/env node`, and this host has no
+node. bun runs node's entry points when it is invoked under that name — the same trick
+`maneyko.roles.bun` uses for `bunx` — so step 4 makes a `node` that is bun, and step 5 puts
+that one directory on `PATH`. Nothing else on the host finds a `node`, which is correct:
+bun is not node, and only this build is asking it to pretend.
+
+`bun --bun run build` is the documented way to ask for the same thing and is what you would
+reach for by hand. It works interactively and silently does nothing for root, so it is not
+what the role uses. Which matters, because:
+
+**The build very likely runs as root, not as `config.owner`.** `ansible_become_user` is a
+connection variable, so an inventory that pins it — `google-setup`'s does, to `root` — outranks
+the `become_user` keyword on the task, and Ansible escalates to root without saying so. The
+shared bun cache survives this because `maneyko.roles.bun` creates it `g+srw` and its shim sets
+`umask 0002`, so a root-written entry stays group-writable; and the next apply's `chown -R`
+puts the checkout back. Getting it to genuinely run as `config.owner` needs the `acl` package
+on the host, which is not installed.
 
 ## Ownership
 
