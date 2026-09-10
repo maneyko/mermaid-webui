@@ -1,0 +1,45 @@
+---
+argument_specs:
+  main:
+    short_description: Deploy mermaid-webui and its NGINX site
+    description: >-
+      Builds the bundle on the host and serves it as static files. There is no
+      service and no application user. maneyko.roles.nginx_common belongs on
+      the same host, for the certificate snippet the site includes.
+    options:
+      config:
+        type: dict
+        required: true
+        description: Non-secret settings, from the caller's inventory.
+        options:
+          owner:
+            type: str
+            required: true
+            description: >-
+              Human user that owns the checkout and runs the build. NGINX
+              reads the built bundle through the www-data group.
+          version:
+            type: str
+            default: main
+            description: >-
+              Branch, tag or commit to check out. Suboption defaults are
+              documentation only, so the role applies this one itself.
+
+      secrets:
+        type: dict
+        required: true
+        no_log: true
+        description: Everything that must not be logged.
+        options:
+          nginx:
+            type: dict
+            required: true
+            description: The part of the vhost that cannot live in the repo.
+            options:
+              local_conf:
+                type: str
+                required: true
+                description: >-
+                  This host's own NGINX configuration, written to
+                  snippets/mermaid-webui.local.conf and included by the site.
+                  Must carry server_name.

@@ -1,0 +1,9 @@
+---
+mermaid_webui_repo: git@github.com:maneyko/mermaid-webui.git
+mermaid_webui_root: /opt/mermaid-webui
+mermaid_webui_libexec: /usr/local/libexec/mermaid-webui
+
+# maneyko.roles.bun's bun_home, plus its layout. The binary, not the
+# /usr/local/bin shim: the shim execs it under the name bun, and the name is
+# what bun dispatches node behaviour on.
+mermaid_webui_bun_binary: /opt/bun/libexec/bin/bun
