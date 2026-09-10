@@ -61,7 +61,7 @@
   become_user: "{{ config.owner }}"
   changed_when: false
   environment:
-    PATH: "{{ mermaid_webui_libexec }}:{{ ansible_env.PATH }}"
+    PATH: "{{ mermaid_webui_libexec }}:{{ ansible_facts.env.PATH }}"
   command:
     chdir: "{{ mermaid_webui_root }}"
     cmd: bun run build

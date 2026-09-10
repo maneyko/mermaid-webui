@@ -39,10 +39,10 @@ before the role runs:
     ansible-doc -t role maneyko.mermaid_webui.deploy   # collection installed
     ansible-doc -t role -r roles deploy                # from this repo
 
-`secrets.nginx.local_conf` is the whole of the secret: it carries `server_name`, and it is
-written to `/etc/nginx/snippets/` rather than into the checkout. The site includes
-`snippets/default-cert.conf` for its certificate, so `maneyko.roles.nginx_common` must have run
-on the host and that certificate must cover the name.
+`secrets.nginx.local_conf` is where this host's own NGINX configuration goes: it carries
+`server_name`, and it is written to `/etc/nginx/snippets/` rather than into the checkout. The
+site includes `snippets/default-cert.conf` for its certificate, so `maneyko.roles.nginx_common`
+must have run on the host and that certificate must cover the name.
 
 `mermaid_webui_repo` in `roles/deploy/vars/main.yaml` is an SSH URL, so the play needs agent
 forwarding (`ansible_ssh_extra_args: "-A"`) and `SSH_AUTH_SOCK` kept across `sudo`. Override it

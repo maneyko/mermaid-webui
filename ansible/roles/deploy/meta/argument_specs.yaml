@@ -40,5 +40,6 @@ argument_specs:
                 type: str
                 required: true
                 description: >-
-                  Written to snippets/mermaid-webui.local.conf, which the site
-                  includes. Must carry server_name.
+                  This host's own NGINX configuration, written to
+                  snippets/mermaid-webui.local.conf and included by the site.
+                  Must carry server_name.
