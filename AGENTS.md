@@ -71,6 +71,7 @@ Access policy would become decoration.
 
 ```
 index.html
+public/favicon.svg      original mark, not mermaid's logo, which is their trademark
 src/main.tsx            React root
 src/App.tsx             owns the source string and which file it came from
 src/CodePane.tsx        CodeMirror 6 editor, controlled
