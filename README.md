@@ -8,7 +8,8 @@ backend.
 double-click or press Enter to rename it in place — including labelling an edge that has
 none — and Delete to remove it. Drag between nodes to connect them. Arm one of mermaid's 53
 shapes and click a node to hang a new one off it, or blank canvas for a node of its own; with
-something selected those same buttons restyle it, and a row of swatches recolours it. Undo
+something selected those same buttons restyle it, and the swatches, a shade slider and a
+colour wheel recolour it. Drag the divider to give the code or the canvas more room. Undo
 from anywhere with cmd+Z. Every change rewrites the source with the smallest possible edit,
 so the `.mmd` stays yours: hand-edited formatting, comments and all come back untouched. Your
 work survives a refresh, and cmd+S writes it back to a real file — that last part needs Chrome

@@ -572,7 +572,12 @@ including a few pixels of drift, because that is the case that actually breaks.
 - **`setTimeout` is throttled to ~1s in the driven tab**, because it is backgrounded. A poll
   loop written as `setTimeout(40)` runs at 1Hz, which makes a 1.1s CSS animation look like it
   finishes in two frames. To inspect an animation, pause it and set `currentTime` rather than
-  sampling it.
+  sampling it. `requestAnimationFrame` is worse: it never fires at all, so awaiting it hangs
+  the `javascript_tool` call until it times out. To see what a React update rendered, make
+  the change in one call and read the DOM in the next.
+- **Snapshot the autosave before driving the app.** `localStorage['mermaid-webui:source']`
+  on port 5173 is the user's own diagram, and every test gesture rewrites it. Copy it to a
+  file, not a page variable -- those do not survive a reload.
 - **The first synthetic click after a navigate or reload is frequently dropped**, and so are
   clicks whose coordinates came from a screenshot taken before the window resized. Assert the
   intermediate state -- that the node really did get selected -- before concluding anything
