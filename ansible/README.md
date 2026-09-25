@@ -96,7 +96,7 @@ on the host, which is not installed.
 `/opt/mermaid-webui` is `config.owner:www-data`, directories `2750` and files `g-w,o=`, so
 NGINX reads `dist/` through the group and nothing outside it reads the checkout at all.
 
-Step 3 runs *before* step 4, so `node_modules/` and `dist/` are not swept until the next apply.
+Step 3 runs *before* step 5, so `node_modules/` and `dist/` are not swept until the next apply.
 That is fine rather than latent: `/opt/mermaid-webui` is setgid, both directories inherit group
 `www-data`, and the bun shim's `umask 0002` leaves files group-readable — so NGINX serves a
 first run.

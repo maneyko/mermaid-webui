@@ -29,6 +29,7 @@ owns node positions, which is exactly the wrong model here.
 ```sh
 bun install
 bun run dev        # http://localhost:5173
+bun run test       # bun test, over correlate.ts and edit.ts
 bun run typecheck  # tsc --noEmit
 bun run build      # typecheck, then production build
 ```
@@ -39,9 +40,11 @@ fail `bun run dev`. Run `bun run typecheck` explicitly.
 ## Browser support
 
 Everything works in any modern browser except opening and saving files, which needs the File
-System Access API and so is Chrome and Edge only. That was a deliberate choice over shipping a
-download/upload fallback beside it: two code paths for one job, and the fallback would be the
-half nobody exercises. Autosave covers the rest of the world.
+System Access API and so is Chrome and Edge only. That was a deliberate choice over wiring a
+download/upload fallback behind the same buttons: two code paths for one job, and the fallback
+would be the half nobody exercises. Autosave covers the rest of the world for now; the planned
+Import/Export in the README's work items is a separate pair of controls with its own name, not
+that fallback.
 
 ## Deploying
 

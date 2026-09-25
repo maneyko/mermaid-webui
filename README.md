@@ -212,6 +212,14 @@ Not done yet, roughly in the order I would take them:
       have different semantics, and hiding that behind one label is how the untested half
       ends up lying to you.
 
+- [ ] **Several diagrams open at once, behind a dropdown.** Keeping a few diagrams around
+      today means a Chrome tab each, and that does not work: every tab autosaves into the same
+      `localStorage` slot, so whichever wrote last is what all of them reload into. Instead,
+      one tab holds several documents, each with its own autosave and its own file handle, and
+      a dropdown in the file island switches between them. Switching has to swap the
+      CodeMirror document and its history together, or cmd+Z in one diagram rewrites another.
+      The naming and when-to-create questions in the library item below apply here too.
+
 - [ ] **A library of past diagrams, if it is still wanted afterwards.** A panel listing
       what you have worked on. Deliberately last, because once files work the filesystem is
       already the library, with names, folders, backups and history. If it is built: name
@@ -277,6 +285,10 @@ offering connection points — four points would imply a choice that cannot be e
   refresh you have your text back from autosave but Save asks for a location again.
   `FileSystemFileHandle` can be stored in IndexedDB and re-permissioned, which is the fix if
   this becomes annoying.
+- **Two tabs share one autosave.** There is a single `localStorage` slot, written on every
+  change and read only at startup, so two open tabs overwrite each other's copy and a reload of
+  either brings back whichever was edited last. The open file is unaffected; cmd+S still
+  writes each tab's own text.
 - **Mermaid's shape aliases are not recognised.** Every shape has two or three of them —
   `db` and `database` for `cyl`, `subroutine` for `fr-rect` — and only the canonical short
   name is in the list here. A hand-written `A@{ shape: db }` still renders as a cylinder; the
