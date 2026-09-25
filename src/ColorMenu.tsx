@@ -1,4 +1,4 @@
-import { useState, type PointerEvent } from 'react'
+import { useState, type PointerEvent, type ReactNode } from 'react'
 import {
   colorFromFill,
   COLORS,
@@ -15,6 +15,8 @@ interface ColorMenuProps {
   disabled: boolean
   onPreview: (color: NodeColor) => void
   onPick: (color: NodeColor) => void
+  // The shade slider, inside the root so pressing it does not count as a press outside.
+  children: ReactNode
 }
 
 const HUES = [0, 60, 120, 180, 240, 300, 360]
@@ -25,7 +27,7 @@ function wheel(lightness: string): string {
 
 // Any colour at all: a wheel for hue and saturation, and fields for an exact hex or RGB. The
 // shade slider beside it owns lightness, so the wheel is drawn at the node's own lightness.
-export default function ColorMenu({ fill, disabled, onPreview, onPick }: ColorMenuProps) {
+export default function ColorMenu({ fill, disabled, onPreview, onPick, children }: ColorMenuProps) {
   const { open, setOpen, root } = usePopover()
   const [draft, setDraft] = useState<NodeColor | null>(null)
 
@@ -65,6 +67,8 @@ export default function ColorMenu({ fill, disabled, onPreview, onPick }: ColorMe
         style={{ background: wheel('72%') }}
         onClick={() => setOpen(!open)}
       />
+
+      {children}
 
       {open && !disabled && (
         <div className="island color-menu">

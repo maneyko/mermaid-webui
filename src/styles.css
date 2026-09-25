@@ -452,6 +452,8 @@ body {
 .color-menu-root {
   position: relative;
   display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 /* Anchored under its own badge, the same way the shape menu is. */

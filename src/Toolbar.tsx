@@ -248,35 +248,35 @@ export default function Toolbar({
           disabled={!hasNodeSelection}
           onPreview={onPreviewColor}
           onPick={onPickColor}
-        />
-
-        <span className="shade">
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={draftShade ?? (shadeBase === null ? 50 : shadeOf(shadeBase) ?? 50)}
-            disabled={!hasNodeSelection || shadeBase === null}
-            aria-label="Shade of the selected node's colour"
-            title="Lighter or darker, in the selected node's own colour"
-            style={{ background: shadeBase === null ? undefined : shadeTrack(shadeBase) }}
-            onChange={(event) => {
-              if (shadeBase === null) return
-              const picked = snapShade(Number(event.target.value))
-              setDraftShade(picked)
-              onPreviewColor(colorAtShade(shadeBase, picked) ?? DEFAULT_COLOR)
-            }}
-            onPointerUp={(event) => {
-              commitShade()
-              // A focused input switches off every canvas shortcut, Delete included.
-              event.currentTarget.blur()
-            }}
-            onKeyUp={commitShade}
-          />
-          {SHADE_ANCHORS.map((anchor) => (
-            <i key={anchor} style={{ left: `calc(6px + (100% - 12px) * ${anchor / 100})` }} />
-          ))}
-        </span>
+        >
+          <span className="shade">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={draftShade ?? (shadeBase === null ? 50 : shadeOf(shadeBase) ?? 50)}
+              disabled={!hasNodeSelection || shadeBase === null}
+              aria-label="Shade of the selected node's colour"
+              title="Lighter or darker, in the selected node's own colour"
+              style={{ background: shadeBase === null ? undefined : shadeTrack(shadeBase) }}
+              onChange={(event) => {
+                if (shadeBase === null) return
+                const picked = snapShade(Number(event.target.value))
+                setDraftShade(picked)
+                onPreviewColor(colorAtShade(shadeBase, picked) ?? DEFAULT_COLOR)
+              }}
+              onPointerUp={(event) => {
+                commitShade()
+                // A focused input switches off every canvas shortcut, Delete included.
+                event.currentTarget.blur()
+              }}
+              onKeyUp={commitShade}
+            />
+            {SHADE_ANCHORS.map((anchor) => (
+              <i key={anchor} style={{ left: `calc(6px + (100% - 12px) * ${anchor / 100})` }} />
+            ))}
+          </span>
+        </ColorMenu>
 
         <span className="separator" />
 
