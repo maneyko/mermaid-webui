@@ -202,6 +202,12 @@ viable at all; everything before it was chrome.
       had no index at all and nothing to double-click, since mermaid renders its label element
       at zero size and parks it away from the line.
 
+- [x] **19. A draggable divider.** Drag the line between the code pane and the canvas to make
+      either wider. The canvas always keeps room for the tool island, and when the three
+      islands no longer fit on one row the tools drop below the corners instead of being drawn
+      over them. The width is a view setting, like the zoom: it is not saved, and a reload
+      puts the split back.
+
 Not done yet, roughly in the order I would take them:
 
 - [ ] **Import and export for browsers without the File System Access API.** A download link
@@ -219,10 +225,6 @@ Not done yet, roughly in the order I would take them:
       a dropdown in the file island switches between them. Switching has to swap the
       CodeMirror document and its history together, or cmd+Z in one diagram rewrites another.
       The naming and when-to-create questions in the library item below apply here too.
-
-- [ ] **A draggable divider between the code pane and the canvas.** The split is fixed at
-      `minmax(280px, 34%) 1fr` in `src/styles.css`. Dragging the divider changes that one
-      column. The width is a view preference, like the zoom, so it never goes in the source.
 
 - [ ] **Manage mermaid classes from the canvas.** Define a `classDef`, apply it to the
       selected node with `class A name`, and take it off again. This is where recolouring many

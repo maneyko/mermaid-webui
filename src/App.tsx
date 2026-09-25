@@ -40,6 +40,7 @@ export default function App() {
   const [reveal, setReveal] = useState<Range | null>(null)
   const [file, setFile] = useState<FileSystemFileHandle | null>(null)
   const [savedSource, setSavedSource] = useState<string | null>(null)
+  const [codeWidth, setCodeWidth] = useState<number | null>(null)
 
   useEffect(() => {
     writeAutosave(source)
@@ -126,11 +127,27 @@ export default function App() {
   }
 
   return (
-    <main className="app">
+    <main
+      className="app"
+      style={codeWidth === null ? undefined : { gridTemplateColumns: `${codeWidth}px auto 1fr` }}
+    >
       <CodePane
         source={source}
         reveal={reveal}
         onChange={rewrite}
+      />
+      <div
+        className="divider"
+        onPointerDown={(event) => {
+          // Otherwise the press starts a text selection in the editor beside it.
+          event.preventDefault()
+          event.currentTarget.setPointerCapture(event.pointerId)
+        }}
+        onPointerMove={(event) => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+          // The canvas keeps enough room for the tools island, which is the widest of the three.
+          setCodeWidth(Math.min(Math.max(event.clientX, 200), window.innerWidth - 520))
+        }}
       />
       <Canvas
         source={source}
