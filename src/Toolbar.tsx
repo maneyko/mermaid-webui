@@ -109,8 +109,12 @@ function snapShade(shade: number): number {
   return anchor ?? shade
 }
 
+function shadeFill(base: string, shade: number): string {
+  return (colorAtShade(base, shade) ?? DEFAULT_COLOR).fill
+}
+
 function shadeTrack(base: string): string {
-  const stops = SHADE_ANCHORS.map((anchor) => (colorAtShade(base, anchor) ?? DEFAULT_COLOR).fill)
+  const stops = SHADE_ANCHORS.map((anchor) => shadeFill(base, anchor))
   return `linear-gradient(to right, ${stops.join(', ')})`
 }
 
@@ -244,7 +248,8 @@ export default function Toolbar({
         })}
 
         <ColorMenu
-          fill={fill}
+          // The shade being dragged, so the wheel and its fields follow the node while it moves.
+          fill={draftShade === null || shadeBase === null ? fill : shadeFill(shadeBase, draftShade)}
           disabled={!hasNodeSelection}
           onPreview={onPreviewColor}
           onPick={onPickColor}
