@@ -220,6 +220,22 @@ Not done yet, roughly in the order I would take them:
       CodeMirror document and its history together, or cmd+Z in one diagram rewrites another.
       The naming and when-to-create questions in the library item below apply here too.
 
+- [ ] **A draggable divider between the code pane and the canvas.** The split is fixed at
+      `minmax(280px, 34%) 1fr` in `src/styles.css`. Dragging the divider changes that one
+      column. The width is a view preference, like the zoom, so it never goes in the source.
+
+- [ ] **Manage mermaid classes from the canvas.** Define a `classDef`, apply it to the
+      selected node with `class A name`, and take it off again. This is where recolouring many
+      nodes at once belongs: one class instead of one `style` line per node. Writing `class`
+      makes the shared-`class`-line known issue below reachable, so fix that first:
+      deleting a node has to split the id list rather than drop the whole statement.
+
+- [ ] **Pick any hue, not just six swatches.** `COLORS` in `src/edit.ts` is six hand-picked
+      fill-and-stroke pairs. A hue slider or colour wheel would pick the hue and derive the
+      pair from it: a light fill and a saturated stroke of the same hue, which is what makes
+      the current six read well. `colorOf` matches swatches by exact fill, so a derived colour
+      would show no swatch as current. The picker needs its own way to show what the node has.
+
 - [ ] **A library of past diagrams, if it is still wanted afterwards.** A panel listing
       what you have worked on. Deliberately last, because once files work the filesystem is
       already the library, with names, folders, backups and history. If it is built: name
