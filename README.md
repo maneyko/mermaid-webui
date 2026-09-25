@@ -208,11 +208,14 @@ viable at all; everything before it was chrome.
       over them. The width is a view setting, like the zoom: it is not saved, and a reload
       puts the split back.
 
-- [x] **20. Any hue.** A hue slider beside the swatches colours the selected node with a light
-      fill and a strong stroke of whatever hue you drag to, the same pairing that makes the six
-      swatches read well. The node recolours live while you drag, but the source is only
-      written on release, so one cmd+Z takes back the whole drag. The slider also shows the hue
-      of a node that already has a colour, swatch or hand-written.
+- [x] **20. Shades, and any colour at all.** A slider beside the swatches runs through the
+      shades of whatever colour the selected node has: the swatch itself on the middle of five
+      anchors, lighter to the left and darker to the right, snapping when you pass close to
+      one. The last badge in the row opens a colour wheel for hue and saturation, with hex and
+      R, G, B fields for an exact value; the slider then shades that colour too. Every one of
+      these writes a light fill and a strong stroke of the same hue, the pairing the swatches
+      use. The node recolours live while you drag either the slider or the wheel, but the
+      source is only written on release, so one cmd+Z takes back the whole drag.
 
 Not done yet, roughly in the order I would take them:
 

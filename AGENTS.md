@@ -81,6 +81,8 @@ src/RenameOverlay.tsx   the in-place rename box: its text, and how the edit ends
 src/usePanZoom.ts       the viewport: pan drag, wheel zoom, fit
 src/Toolbar.tsx         the floating islands and the Tool type
 src/ShapeMenu.tsx       the full shape library: its icons, and whether it is open
+src/ColorMenu.tsx       the colour wheel and the hex and RGB fields
+src/usePopover.ts       open until a press lands outside or Escape; both menus use it
 src/correlate.ts        source -> node spans, and rendered SVG id -> node id
 src/correlate.test.ts   bun test
 src/edit.ts             minimal rewrites back into the source
@@ -488,14 +490,23 @@ The UI half has two traps worth keeping:
   colour removes the statement only when nothing else is left in it.
 - **Colouring an unknown id would draw a node.** `style X` is an `addVertex`, the same fact
   that makes deletion remove style lines, so `setNodeColor` declines an id it cannot find.
-- **The hue slider writes the source once, on release.** Writing on every `input` event puts
-  each step in CodeMirror's history unless the steps land inside its 500ms grouping window,
-  so a slow drag took several cmd+Z to undo. While dragging, `previewColor` in `Canvas` paints
-  the rendered shape's inline style instead, and the render after the commit replaces it.
-  `pointerup` reaches the input even when released off it, which is what makes this safe.
+- **The shade slider and the colour wheel write the source once, on release.** Writing on
+  every `input` event puts each step in CodeMirror's history unless the steps land inside its
+  500ms grouping window, so a slow drag took several cmd+Z to undo. While dragging,
+  `previewColor` in `Canvas` paints the rendered shape's inline style instead, and the render
+  after the commit replaces it. `pointerup` reaches the slider even when released off it, and
+  the wheel holds pointer capture, which is what makes this safe.
+- **A shade has no state of its own; its family is read back from the fill.** A shade keeps
+  its swatch's hue and saturation and changes only lightness, so `familyOf` in `edit.ts`
+  finds the swatch by those two, within a tolerance that absorbs 8-bit rounding of very pale
+  fills. That is what lets the slider place a shade on reload, and why shade 50 of a family
+  writes the swatch's exact hex, so the swatch shows as current again. A fill from no family
+  -- off the wheel, or hand-written -- is shaded around 85% lightness instead.
 - **Colours are written as hex, never `hsl(...)`**, because mermaid splits a `style`
-  statement on commas. `hueOf` reads any `#rrggbb` fill back, so it is within a degree of
-  what `colorFromHue` wrote rather than exact.
+  statement on commas. The stroke is always derived from the fill by `colorFromFill`; the
+  hex and RGB fields set the fill only.
+- **The wheel is drawn at the node's own lightness**, clamped to 50-90%, because the slider
+  owns lightness and a wheel at any other lightness would promise colours it does not write.
 - **This is the one edit that keeps its selection**, because trying a colour and then another
   is the whole gesture. It recomputes the reveal span against the rewritten source rather
   than carrying the old one, which is the rule the Selection section sets out.

@@ -2,10 +2,17 @@ import { expect, test } from 'bun:test'
 import {
   addConnectedNode,
   addStandaloneNode,
-  colorFromHue,
+  colorAtShade,
+  colorFromFill,
   colorOf,
   COLORS,
-  hueOf,
+  DEFAULT_COLOR,
+  hexToHsl,
+  hslToHex,
+  normalizeHex,
+  shadeOf,
+  type Hsl,
+  type NodeColor,
   connectNodes,
   setNodeColor,
   deleteEdge,
@@ -443,20 +450,49 @@ test('what colouring writes is readable back by the scanner', () => {
   expect(renameLabel(red, 'C', 'Decide')).toContain('C{Decide}')
 })
 
-// Within a degree, not exactly: eight bits a channel cannot hold every hue of a pale fill.
-test('a hue writes a light fill and a strong stroke, and reads back as that hue', () => {
-  expect(colorFromHue(0)).toMatchObject({ fill: '#ffb3b3', stroke: '#c32222' })
-  for (const hue of [0, 45, 120, 200, 275, 358]) {
-    const read = hueOf(setNodeColor(SOURCE, 'A', colorFromHue(hue)), 'A') ?? -10
-    expect(Math.abs(read - hue)).toBeLessThanOrEqual(1)
+test('hex and hsl convert both ways', () => {
+  for (const hex of ['#ffc9c9', '#1971c2', '#e9ecef', '#000000', '#ffffff']) {
+    expect(hslToHex(hexToHsl(hex) as Hsl)).toBe(hex)
   }
+  expect(hexToHsl('pink')).toBeNull()
 })
 
-test('a swatch has a hue, and a grey or named fill has none', () => {
-  expect(hueOf(setNodeColor(SOURCE, 'A', color('Blue')), 'A')).toBe(206)
-  expect(hueOf(`${SOURCE}  style A fill:#cccccc\n`, 'A')).toBeNull()
-  expect(hueOf(`${SOURCE}  style A fill:pink\n`, 'A')).toBeNull()
-  expect(hueOf(SOURCE, 'A')).toBeNull()
+test('a typed hex is accepted with or without its hash', () => {
+  expect(normalizeHex(' A5D8FF ')).toBe('#a5d8ff')
+  expect(normalizeHex('#a5d8ff')).toBe('#a5d8ff')
+  expect(normalizeHex('#abc')).toBeNull()
+  expect(normalizeHex('blue')).toBeNull()
+})
+
+test('every swatch sits in the middle of its own shades', () => {
+  for (const swatch of COLORS) {
+    expect(shadeOf(swatch.fill)).toBe(50)
+    expect(colorAtShade(swatch.fill, 50)).toBe(swatch)
+  }
+  expect(colorAtShade(DEFAULT_COLOR.fill, 50)).toBeNull()
+})
+
+test('a shade keeps its family, so it reads back where it was put', () => {
+  const blue = color('Blue').fill
+  for (const shade of [0, 25, 75, 100]) {
+    const picked = colorAtShade(blue, shade) as NodeColor
+    expect(Math.abs((shadeOf(picked.fill) ?? -10) - shade)).toBeLessThanOrEqual(1)
+    // Moving along the slider from a shade, rather than from the swatch, is the same family.
+    expect(colorAtShade(picked.fill, 50)).toBe(color('Blue'))
+  }
+  const light = hexToHsl((colorAtShade(blue, 0) as NodeColor).fill) as Hsl
+  const dark = hexToHsl((colorAtShade(blue, 100) as NodeColor).fill) as Hsl
+  expect(light.l).toBeGreaterThan(dark.l)
+})
+
+test('a fill of no family gets a darker stroke of its own hue', () => {
+  const custom = colorFromFill('#80c0a0')
+  expect(custom.fill).toBe('#80c0a0')
+  const fill = hexToHsl(custom.fill) as Hsl
+  const stroke = hexToHsl(custom.stroke) as Hsl
+  expect(Math.abs(fill.h - stroke.h)).toBeLessThanOrEqual(2)
+  expect(stroke.l).toBeLessThan(fill.l)
+  expect(colorFromFill(color('Red').fill)).toBe(color('Red'))
 })
 
 const HUB = `flowchart TD

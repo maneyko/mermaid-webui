@@ -302,10 +302,10 @@ function withoutColor(declarations: string): string[] {
     .filter((part) => part !== '' && !COLOR_PROPERTIES.has(part.split(':')[0]?.trim() ?? ''))
 }
 
-function fillOf(source: string, nodeId: string): string | undefined {
+export function fillOf(source: string, nodeId: string): string | null {
   const statement = styleStatement(source, nodeId)
-  if (statement === undefined) return undefined
-  return /(?:^|,)\s*fill\s*:\s*([^,]+)/.exec(declarationsOf(source, statement))?.[1]?.trim()
+  if (statement === undefined) return null
+  return /(?:^|,)\s*fill\s*:\s*([^,]+)/.exec(declarationsOf(source, statement))?.[1]?.trim() ?? null
 }
 
 export function colorOf(source: string, nodeId: string): NodeColor | null {
@@ -313,31 +313,96 @@ export function colorOf(source: string, nodeId: string): NodeColor | null {
   return COLORS.find((color) => color.fill === fill) ?? null
 }
 
-function hslToHex(hue: number, saturation: number, lightness: number): string {
-  const amplitude = saturation * Math.min(lightness, 1 - lightness)
+// Mermaid's own node colour, which is what a node with no style statement is drawn in.
+export const DEFAULT_COLOR: NodeColor = { name: 'Default', fill: '#ececff', stroke: '#9370db' }
+
+const PALETTE = [DEFAULT_COLOR, ...COLORS]
+
+export interface Hsl {
+  h: number
+  s: number
+  l: number
+}
+
+// Hex is what gets written, never `hsl(...)`, because mermaid splits a style statement on commas.
+export function hslToHex({ h, s, l }: Hsl): string {
+  const amplitude = s * Math.min(l, 1 - l)
   const channel = (n: number) => {
-    const k = (n + hue / 30) % 12
-    const value = lightness - amplitude * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+    const k = (n + h / 30) % 12
+    const value = l - amplitude * Math.max(-1, Math.min(k - 3, 9 - k, 1))
     return Math.round(value * 255).toString(16).padStart(2, '0')
   }
   return `#${channel(0)}${channel(8)}${channel(4)}`
 }
 
-// Hex rather than `hsl(...)`, because mermaid splits a style statement on commas.
-export function colorFromHue(hue: number): NodeColor {
-  return { name: `Hue ${hue}`, fill: hslToHex(hue, 1, 0.85), stroke: hslToHex(hue, 0.7, 0.45) }
-}
-
-// Any `#rrggbb` fill has a hue, so the slider can show a swatch colour or a hand-written one.
-export function hueOf(source: string, nodeId: string): number | null {
-  const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(fillOf(source, nodeId) ?? '')
-  if (hex === null) return null
-  const [r, g, b] = hex.slice(1).map((pair) => parseInt(pair, 16) / 255) as [number, number, number]
+export function hexToHsl(hex: string): Hsl | null {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
+  if (match === null) return null
+  const [r, g, b] = match.slice(1).map((pair) => parseInt(pair, 16) / 255) as [number, number, number]
   const max = Math.max(r, g, b)
   const range = max - Math.min(r, g, b)
-  if (range === 0) return null
+  const l = (max + Math.min(r, g, b)) / 2
+  if (range === 0) return { h: 0, s: 0, l }
   const sector = max === r ? (g - b) / range : max === g ? (b - r) / range + 2 : (r - g) / range + 4
-  return Math.round((sector * 60 + 360) % 360)
+  return { h: (sector * 60 + 360) % 360, s: range / (1 - Math.abs(2 * l - 1)), l }
+}
+
+// What someone types into a hex field: with or without the `#`, any case.
+export function normalizeHex(text: string): string | null {
+  const match = /^#?([0-9a-f]{6})$/i.exec(text.trim())
+  return match === null ? null : `#${match[1]?.toLowerCase()}`
+}
+
+// The pairing the swatches use -- a strong stroke of the fill's own hue -- for any fill.
+export function colorFromFill(fill: string): NodeColor {
+  const swatch = PALETTE.find((color) => color.fill === fill)
+  if (swatch !== undefined) return swatch
+  const { h, s, l } = hexToHsl(fill) ?? { h: 0, s: 0, l: 0.5 }
+  return { name: 'Custom', fill, stroke: hslToHex({ h, s: Math.min(s, 0.8), l: Math.max(l - 0.4, 0.15) }) }
+}
+
+// Shades run from nearly white to as dark as mermaid's black label text stays readable on.
+const LIGHTEST = 0.97
+const DARKEST = 0.58
+
+export const SHADE_ANCHORS = [0, 25, 50, 75, 100]
+
+// A shade keeps its swatch's hue and saturation, so reading those back says which family a
+// fill came from. The tolerances absorb what eight bits a channel does to a very pale fill.
+function familyOf(hsl: Hsl): { color: NodeColor; hsl: Hsl } | undefined {
+  for (const color of PALETTE) {
+    const base = hexToHsl(color.fill) as Hsl
+    const turn = Math.abs(base.h - hsl.h) % 360
+    if (Math.min(turn, 360 - turn) <= 4 && Math.abs(base.s - hsl.s) <= 0.08) return { color, hsl: base }
+  }
+  return undefined
+}
+
+// 50 is the swatch itself, lighter to the left and darker to the right. A fill from no family
+// is placed as if its family's middle were 85% lightness.
+export function shadeOf(fill: string): number | null {
+  const hsl = hexToHsl(fill)
+  if (hsl === null) return null
+  const base = familyOf(hsl)?.hsl.l ?? 0.85
+  const shade =
+    hsl.l >= base
+      ? 50 * ((LIGHTEST - hsl.l) / Math.max(LIGHTEST - base, 0.001))
+      : 50 + 50 * ((base - hsl.l) / (base - DARKEST))
+  return Math.round(Math.min(Math.max(shade, 0), 100))
+}
+
+// Null is mermaid's default, which is written by removing the colour rather than restating it.
+export function colorAtShade(fill: string, shade: number): NodeColor | null {
+  const hsl = hexToHsl(fill)
+  if (hsl === null) return null
+  const family = familyOf(hsl)
+  if (family !== undefined && shade === 50) return family.color === DEFAULT_COLOR ? null : family.color
+  const { h, s, l: base } = family?.hsl ?? { ...hsl, l: 0.85 }
+  const l =
+    shade <= 50
+      ? LIGHTEST - (LIGHTEST - base) * (shade / 50)
+      : base - (base - DARKEST) * ((shade - 50) / 50)
+  return colorFromFill(hslToHex({ h, s, l }))
 }
 
 export function setNodeColor(source: string, nodeId: string, color: NodeColor | null): string {

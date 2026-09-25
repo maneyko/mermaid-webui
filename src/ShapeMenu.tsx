@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
 import { SHAPES, type Shape } from './edit'
+import usePopover from './usePopover'
 
 // One path per shape, drawn in a 24x24 box to roughly the outline mermaid renders. They are
 // approximations by eye, not extracts of mermaid's own geometry, which is computed from the
@@ -110,28 +110,7 @@ interface ShapeMenuProps {
 // The forty-nine shapes that do not fit on the toolbar. Owns whether it is open, because
 // nothing outside it opens or closes it.
 export default function ShapeMenu({ current, hasNodeSelection, onPick }: ShapeMenuProps) {
-  const [open, setOpen] = useState(false)
-  const root = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && root.current?.contains(event.target)) return
-      setOpen(false)
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-
-    // Capture, because the toolbar stops both of these before they reach the window.
-    document.addEventListener('pointerdown', onPointerDown, true)
-    document.addEventListener('keydown', onKeyDown, true)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true)
-      document.removeEventListener('keydown', onKeyDown, true)
-    }
-  }, [open])
+  const { open, setOpen, root } = usePopover()
 
   return (
     <div className="shape-menu-root" ref={root}>

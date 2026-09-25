@@ -284,7 +284,7 @@ body {
 
 /* Past this the three islands no longer fit on one row, so the tools drop below the corners
    rather than being drawn over them. */
-@container (max-width: 1040px) {
+@container (max-width: 1070px) {
   .chrome {
     grid-template-columns: 1fr 1fr;
   }
@@ -445,31 +445,105 @@ body {
   outline-offset: 1.5px;
 }
 
-.island .hue {
-  appearance: none;
-  width: 72px;
+.island .any-color {
+  border-color: var(--border);
+}
+
+.color-menu-root {
+  position: relative;
+  display: flex;
+}
+
+/* Anchored under its own badge, the same way the shape menu is. */
+.color-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  transform: translateX(-50%);
+}
+
+.color-wheel {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.color-wheel-marker {
+  position: absolute;
+  width: 10px;
   height: 10px;
-  margin: 0 4px;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 40%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.color-fields {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+}
+
+.color-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--muted);
+  font: 600 10px / 1 system-ui, sans-serif;
+}
+
+.color-fields input {
+  width: 34px;
+  padding: 4px;
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: linear-gradient(
-    to right,
-    hsl(0 90% 65%),
-    hsl(60 90% 65%),
-    hsl(120 90% 65%),
-    hsl(180 90% 65%),
-    hsl(240 90% 65%),
-    hsl(300 90% 65%),
-    hsl(360 90% 65%)
-  );
+  color: var(--text);
+  font: 11px / 1 var(--mono);
+}
+
+.color-fields input.hex {
+  width: 64px;
+}
+
+.island .shade {
+  position: relative;
+  display: flex;
+  margin: 0 4px;
+}
+
+.island .shade input {
+  appearance: none;
+  width: 80px;
+  height: 10px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
   cursor: pointer;
 }
 
-.island .hue:disabled {
+.island .shade input:disabled {
   opacity: 0.3;
   cursor: default;
 }
 
-.island .hue::-webkit-slider-thumb {
+.island .shade i {
+  position: absolute;
+  top: 100%;
+  width: 2px;
+  height: 3px;
+  margin: 2px 0 0 -1px;
+  background: var(--muted);
+  pointer-events: none;
+}
+
+.island .shade input::-webkit-slider-thumb {
   appearance: none;
   width: 12px;
   height: 12px;
@@ -479,7 +553,7 @@ body {
   box-shadow: 0 0 0 1px var(--border);
 }
 
-.island .hue::-moz-range-thumb {
+.island .shade input::-moz-range-thumb {
   width: 8px;
   height: 8px;
   border: 2px solid var(--island);

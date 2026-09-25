@@ -1,5 +1,16 @@
 import { useState } from 'react'
-import { COLORS, colorFromHue, QUICK_SHAPES, type NodeColor, type Shape } from './edit'
+import ColorMenu from './ColorMenu'
+import {
+  colorAtShade,
+  COLORS,
+  DEFAULT_COLOR,
+  hexToHsl,
+  QUICK_SHAPES,
+  SHADE_ANCHORS,
+  shadeOf,
+  type NodeColor,
+  type Shape,
+} from './edit'
 import ShapeMenu, { ShapeIcon } from './ShapeMenu'
 
 export type Tool = 'select' | 'arrow' | 'shape'
@@ -22,7 +33,7 @@ interface ToolbarProps {
   onPickShape: (shape: Shape) => void
   hasNodeSelection: boolean
   color: NodeColor | null
-  hue: number | null
+  fill: string | null
   onPreviewColor: (color: NodeColor) => void
   onPickColor: (color: NodeColor | null) => void
   canDelete: boolean
@@ -92,9 +103,16 @@ const TOOLS: { tool: Tool; label: string; shortcut: string; icon: () => React.Re
 
 const SHAPE_SHORTCUTS = ['3', '4', '5', '6']
 
-// Mermaid's own default node, so the swatch that clears the colour shows what it returns you
-// to rather than being an empty hole in the row.
-const DEFAULT_SWATCH = { name: 'Default', fill: '#ececff', stroke: '#9370db' }
+// Close enough to an anchor and the slider settles on it, so the swatch itself is easy to hit.
+function snapShade(shade: number): number {
+  const anchor = SHADE_ANCHORS.find((each) => Math.abs(each - shade) <= 4)
+  return anchor ?? shade
+}
+
+function shadeTrack(base: string): string {
+  const stops = SHADE_ANCHORS.map((anchor) => (colorAtShade(base, anchor) ?? DEFAULT_COLOR).fill)
+  return `linear-gradient(to right, ${stops.join(', ')})`
+}
 
 export default function Toolbar({
   tool,
@@ -105,7 +123,7 @@ export default function Toolbar({
   onPickShape,
   hasNodeSelection,
   color,
-  hue,
+  fill,
   onPreviewColor,
   onPickColor,
   canDelete,
@@ -120,11 +138,14 @@ export default function Toolbar({
   // will be this" when there is not.
   const current = hasNodeSelection ? nodeShape : tool === 'shape' ? shape : null
 
-  // The hue being dragged, written to the source once on release so a drag is one undo.
-  const [draftHue, setDraftHue] = useState<number | null>(null)
-  const commitHue = () => {
-    if (draftHue !== null) onPickColor(colorFromHue(draftHue))
-    setDraftHue(null)
+  // The shade being dragged, written to the source once on release so a drag is one undo.
+  // Shades are of the node's own colour, or of mermaid's default when it has none; a fill
+  // that is not `#rrggbb` has no shades to offer.
+  const shadeBase = fill === null ? DEFAULT_COLOR.fill : hexToHsl(fill) === null ? null : fill
+  const [draftShade, setDraftShade] = useState<number | null>(null)
+  const commitShade = () => {
+    if (draftShade !== null && shadeBase !== null) onPickColor(colorAtShade(shadeBase, draftShade))
+    setDraftShade(null)
   }
 
   return (
@@ -200,9 +221,9 @@ export default function Toolbar({
         <span className="separator" />
 
         {[null, ...COLORS].map((each) => {
-          const swatch = each ?? DEFAULT_SWATCH
+          const swatch = each ?? DEFAULT_COLOR
           const active =
-            hasNodeSelection && (each === null ? color === null && hue === null : each.name === color?.name)
+            hasNodeSelection && (each === null ? fill === null : each.name === color?.name)
           return (
             <button
               key={swatch.name}
@@ -222,27 +243,40 @@ export default function Toolbar({
           )
         })}
 
-        <input
-          type="range"
-          className="hue"
-          min={0}
-          max={359}
-          value={draftHue ?? hue ?? 0}
+        <ColorMenu
+          fill={fill}
           disabled={!hasNodeSelection}
-          aria-label="Hue of the selected node"
-          title="Colour the selected node any hue"
-          onChange={(event) => {
-            const picked = Number(event.target.value)
-            setDraftHue(picked)
-            onPreviewColor(colorFromHue(picked))
-          }}
-          onPointerUp={(event) => {
-            commitHue()
-            // A focused input switches off every canvas shortcut, Delete included.
-            event.currentTarget.blur()
-          }}
-          onKeyUp={commitHue}
+          onPreview={onPreviewColor}
+          onPick={onPickColor}
         />
+
+        <span className="shade">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={draftShade ?? (shadeBase === null ? 50 : shadeOf(shadeBase) ?? 50)}
+            disabled={!hasNodeSelection || shadeBase === null}
+            aria-label="Shade of the selected node's colour"
+            title="Lighter or darker, in the selected node's own colour"
+            style={{ background: shadeBase === null ? undefined : shadeTrack(shadeBase) }}
+            onChange={(event) => {
+              if (shadeBase === null) return
+              const picked = snapShade(Number(event.target.value))
+              setDraftShade(picked)
+              onPreviewColor(colorAtShade(shadeBase, picked) ?? DEFAULT_COLOR)
+            }}
+            onPointerUp={(event) => {
+              commitShade()
+              // A focused input switches off every canvas shortcut, Delete included.
+              event.currentTarget.blur()
+            }}
+            onKeyUp={commitShade}
+          />
+          {SHADE_ANCHORS.map((anchor) => (
+            <i key={anchor} style={{ left: `calc(6px + (100% - 12px) * ${anchor / 100})` }} />
+          ))}
+        </span>
 
         <span className="separator" />
 
