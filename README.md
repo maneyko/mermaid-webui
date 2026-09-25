@@ -241,6 +241,15 @@ Not done yet, roughly in the order I would take them:
       makes the shared-`class`-line known issue below reachable, so fix that first:
       deleting a node has to split the id list rather than drop the whole statement.
 
+- [ ] **Colour an edge and its label.** Mermaid 11.17.2 can: `stroke` colours the line and
+      its arrowhead, and `color` the label's text, in both of the ways to address an edge.
+      The label's box cannot be coloured -- a `background-color` never reaches it, and it
+      keeps the theme's grey. The two ways are the choice to make first:
+      `linkStyle 0 stroke:...` addresses the edge by position, so writing it makes the
+      `linkStyle` known issue below reachable, and every delete that removes an edge would
+      have to renumber it. Naming the edge, `A e1@--> B` plus `class e1 red`, is stable
+      under deletes but rewrites the edge statement itself and is newer syntax.
+
 - [ ] **A library of past diagrams, if it is still wanted afterwards.** A panel listing
       what you have worked on. Deliberately last, because once files work the filesystem is
       already the library, with names, folders, backups and history. If it is built: name
