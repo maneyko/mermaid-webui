@@ -487,6 +487,14 @@ The UI half has two traps worth keeping:
   colour removes the statement only when nothing else is left in it.
 - **Colouring an unknown id would draw a node.** `style X` is an `addVertex`, the same fact
   that makes deletion remove style lines, so `setNodeColor` declines an id it cannot find.
+- **The hue slider writes the source once, on release.** Writing on every `input` event puts
+  each step in CodeMirror's history unless the steps land inside its 500ms grouping window,
+  so a slow drag took several cmd+Z to undo. While dragging, `previewColor` in `Canvas` paints
+  the rendered shape's inline style instead, and the render after the commit replaces it.
+  `pointerup` reaches the input even when released off it, which is what makes this safe.
+- **Colours are written as hex, never `hsl(...)`**, because mermaid splits a `style`
+  statement on commas. `hueOf` reads any `#rrggbb` fill back, so it is within a degree of
+  what `colorFromHue` wrote rather than exact.
 - **This is the one edit that keeps its selection**, because trying a colour and then another
   is the whole gesture. It recomputes the reveal span against the rewritten source rather
   than carrying the old one, which is the rule the Selection section sets out.

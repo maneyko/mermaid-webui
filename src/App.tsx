@@ -146,7 +146,7 @@ export default function App() {
         onPointerMove={(event) => {
           if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
           // The canvas keeps enough room for the tools island, which is the widest of the three.
-          setCodeWidth(Math.min(Math.max(event.clientX, 200), window.innerWidth - 520))
+          setCodeWidth(Math.min(Math.max(event.clientX, 200), window.innerWidth - 600))
         }}
       />
       <Canvas

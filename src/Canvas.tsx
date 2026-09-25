@@ -3,6 +3,7 @@ import mermaid from 'mermaid'
 import { nodeIdFromElement } from './correlate'
 import {
   colorOf,
+  hueOf,
   edgeCount,
   edgeLabelOf,
   labelOf,
@@ -50,6 +51,18 @@ function addEdgeHandles(container: HTMLDivElement) {
     handle.removeAttribute('marker-end')
     handle.removeAttribute('marker-start')
     edge.parentNode?.insertBefore(handle, edge)
+  }
+}
+
+// Paints the rendered node directly, so dragging the hue slider shows the colour without a
+// rewrite per step -- each of those would be its own undo entry. The next render replaces it.
+function previewColor(container: HTMLDivElement | null, nodeId: string, color: NodeColor) {
+  for (const node of container?.querySelectorAll('g.node') ?? []) {
+    if (nodeIdFromElement(node) !== nodeId) continue
+    for (const shape of node.querySelectorAll<SVGElement>('rect, polygon, circle, ellipse, path')) {
+      shape.style.setProperty('fill', color.fill, 'important')
+      shape.style.setProperty('stroke', color.stroke, 'important')
+    }
   }
 }
 
@@ -589,6 +602,10 @@ export default function Canvas({
         onPickShape={pickShape}
         hasNodeSelection={selectedNode !== null}
         color={selectedNode === null ? null : colorOf(source, selectedNode)}
+        hue={selectedNode === null ? null : hueOf(source, selectedNode)}
+        onPreviewColor={(color) => {
+          if (selectedNode !== null) previewColor(diagram.current, selectedNode, color)
+        }}
         onPickColor={(picked) => {
           if (selectedNode !== null) onSetColor(selectedNode, picked)
         }}

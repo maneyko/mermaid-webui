@@ -2,8 +2,10 @@ import { expect, test } from 'bun:test'
 import {
   addConnectedNode,
   addStandaloneNode,
+  colorFromHue,
   colorOf,
   COLORS,
+  hueOf,
   connectNodes,
   setNodeColor,
   deleteEdge,
@@ -439,6 +441,22 @@ test('what colouring writes is readable back by the scanner', () => {
   expect(labelOf(red, 'C')).toBe('Let me think')
   expect(edgeCount(red)).toBe(2)
   expect(renameLabel(red, 'C', 'Decide')).toContain('C{Decide}')
+})
+
+// Within a degree, not exactly: eight bits a channel cannot hold every hue of a pale fill.
+test('a hue writes a light fill and a strong stroke, and reads back as that hue', () => {
+  expect(colorFromHue(0)).toMatchObject({ fill: '#ffb3b3', stroke: '#c32222' })
+  for (const hue of [0, 45, 120, 200, 275, 358]) {
+    const read = hueOf(setNodeColor(SOURCE, 'A', colorFromHue(hue)), 'A') ?? -10
+    expect(Math.abs(read - hue)).toBeLessThanOrEqual(1)
+  }
+})
+
+test('a swatch has a hue, and a grey or named fill has none', () => {
+  expect(hueOf(setNodeColor(SOURCE, 'A', color('Blue')), 'A')).toBe(206)
+  expect(hueOf(`${SOURCE}  style A fill:#cccccc\n`, 'A')).toBeNull()
+  expect(hueOf(`${SOURCE}  style A fill:pink\n`, 'A')).toBeNull()
+  expect(hueOf(SOURCE, 'A')).toBeNull()
 })
 
 const HUB = `flowchart TD

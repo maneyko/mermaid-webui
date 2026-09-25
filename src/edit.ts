@@ -302,11 +302,42 @@ function withoutColor(declarations: string): string[] {
     .filter((part) => part !== '' && !COLOR_PROPERTIES.has(part.split(':')[0]?.trim() ?? ''))
 }
 
-export function colorOf(source: string, nodeId: string): NodeColor | null {
+function fillOf(source: string, nodeId: string): string | undefined {
   const statement = styleStatement(source, nodeId)
-  if (statement === undefined) return null
-  const fill = /(?:^|,)\s*fill\s*:\s*([^,]+)/.exec(declarationsOf(source, statement))?.[1]?.trim()
+  if (statement === undefined) return undefined
+  return /(?:^|,)\s*fill\s*:\s*([^,]+)/.exec(declarationsOf(source, statement))?.[1]?.trim()
+}
+
+export function colorOf(source: string, nodeId: string): NodeColor | null {
+  const fill = fillOf(source, nodeId)
   return COLORS.find((color) => color.fill === fill) ?? null
+}
+
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+  const amplitude = saturation * Math.min(lightness, 1 - lightness)
+  const channel = (n: number) => {
+    const k = (n + hue / 30) % 12
+    const value = lightness - amplitude * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+    return Math.round(value * 255).toString(16).padStart(2, '0')
+  }
+  return `#${channel(0)}${channel(8)}${channel(4)}`
+}
+
+// Hex rather than `hsl(...)`, because mermaid splits a style statement on commas.
+export function colorFromHue(hue: number): NodeColor {
+  return { name: `Hue ${hue}`, fill: hslToHex(hue, 1, 0.85), stroke: hslToHex(hue, 0.7, 0.45) }
+}
+
+// Any `#rrggbb` fill has a hue, so the slider can show a swatch colour or a hand-written one.
+export function hueOf(source: string, nodeId: string): number | null {
+  const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(fillOf(source, nodeId) ?? '')
+  if (hex === null) return null
+  const [r, g, b] = hex.slice(1).map((pair) => parseInt(pair, 16) / 255) as [number, number, number]
+  const max = Math.max(r, g, b)
+  const range = max - Math.min(r, g, b)
+  if (range === 0) return null
+  const sector = max === r ? (g - b) / range : max === g ? (b - r) / range + 2 : (r - g) / range + 4
+  return Math.round((sector * 60 + 360) % 360)
 }
 
 export function setNodeColor(source: string, nodeId: string, color: NodeColor | null): string {

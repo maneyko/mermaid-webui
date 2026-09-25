@@ -208,6 +208,12 @@ viable at all; everything before it was chrome.
       over them. The width is a view setting, like the zoom: it is not saved, and a reload
       puts the split back.
 
+- [x] **20. Any hue.** A hue slider beside the swatches colours the selected node with a light
+      fill and a strong stroke of whatever hue you drag to, the same pairing that makes the six
+      swatches read well. The node recolours live while you drag, but the source is only
+      written on release, so one cmd+Z takes back the whole drag. The slider also shows the hue
+      of a node that already has a colour, swatch or hand-written.
+
 Not done yet, roughly in the order I would take them:
 
 - [ ] **Import and export for browsers without the File System Access API.** A download link
@@ -231,12 +237,6 @@ Not done yet, roughly in the order I would take them:
       nodes at once belongs: one class instead of one `style` line per node. Writing `class`
       makes the shared-`class`-line known issue below reachable, so fix that first:
       deleting a node has to split the id list rather than drop the whole statement.
-
-- [ ] **Pick any hue, not just six swatches.** `COLORS` in `src/edit.ts` is six hand-picked
-      fill-and-stroke pairs. A hue slider or colour wheel would pick the hue and derive the
-      pair from it: a light fill and a saturated stroke of the same hue, which is what makes
-      the current six read well. `colorOf` matches swatches by exact fill, so a derived colour
-      would show no swatch as current. The picker needs its own way to show what the node has.
 
 - [ ] **A library of past diagrams, if it is still wanted afterwards.** A panel listing
       what you have worked on. Deliberately last, because once files work the filesystem is

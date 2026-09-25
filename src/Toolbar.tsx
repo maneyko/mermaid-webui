@@ -1,4 +1,5 @@
-import { COLORS, QUICK_SHAPES, type NodeColor, type Shape } from './edit'
+import { useState } from 'react'
+import { COLORS, colorFromHue, QUICK_SHAPES, type NodeColor, type Shape } from './edit'
 import ShapeMenu, { ShapeIcon } from './ShapeMenu'
 
 export type Tool = 'select' | 'arrow' | 'shape'
@@ -21,6 +22,8 @@ interface ToolbarProps {
   onPickShape: (shape: Shape) => void
   hasNodeSelection: boolean
   color: NodeColor | null
+  hue: number | null
+  onPreviewColor: (color: NodeColor) => void
   onPickColor: (color: NodeColor | null) => void
   canDelete: boolean
   onDelete: () => void
@@ -102,6 +105,8 @@ export default function Toolbar({
   onPickShape,
   hasNodeSelection,
   color,
+  hue,
+  onPreviewColor,
   onPickColor,
   canDelete,
   onDelete,
@@ -114,6 +119,13 @@ export default function Toolbar({
   // A shape button means "the selected node is this" when there is a selection, and "a new node
   // will be this" when there is not.
   const current = hasNodeSelection ? nodeShape : tool === 'shape' ? shape : null
+
+  // The hue being dragged, written to the source once on release so a drag is one undo.
+  const [draftHue, setDraftHue] = useState<number | null>(null)
+  const commitHue = () => {
+    if (draftHue !== null) onPickColor(colorFromHue(draftHue))
+    setDraftHue(null)
+  }
 
   return (
     // Every one of these would otherwise reach the canvas behind the buttons: pointer-down
@@ -189,7 +201,8 @@ export default function Toolbar({
 
         {[null, ...COLORS].map((each) => {
           const swatch = each ?? DEFAULT_SWATCH
-          const active = hasNodeSelection && each?.name === color?.name
+          const active =
+            hasNodeSelection && (each === null ? color === null && hue === null : each.name === color?.name)
           return (
             <button
               key={swatch.name}
@@ -208,6 +221,28 @@ export default function Toolbar({
             />
           )
         })}
+
+        <input
+          type="range"
+          className="hue"
+          min={0}
+          max={359}
+          value={draftHue ?? hue ?? 0}
+          disabled={!hasNodeSelection}
+          aria-label="Hue of the selected node"
+          title="Colour the selected node any hue"
+          onChange={(event) => {
+            const picked = Number(event.target.value)
+            setDraftHue(picked)
+            onPreviewColor(colorFromHue(picked))
+          }}
+          onPointerUp={(event) => {
+            commitHue()
+            // A focused input switches off every canvas shortcut, Delete included.
+            event.currentTarget.blur()
+          }}
+          onKeyUp={commitHue}
+        />
 
         <span className="separator" />
 

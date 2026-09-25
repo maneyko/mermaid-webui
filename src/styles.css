@@ -284,7 +284,7 @@ body {
 
 /* Past this the three islands no longer fit on one row, so the tools drop below the corners
    rather than being drawn over them. */
-@container (max-width: 960px) {
+@container (max-width: 1040px) {
   .chrome {
     grid-template-columns: 1fr 1fr;
   }
@@ -443,6 +443,48 @@ body {
 .island .swatch.active {
   outline: 2px solid var(--select);
   outline-offset: 1.5px;
+}
+
+.island .hue {
+  appearance: none;
+  width: 72px;
+  height: 10px;
+  margin: 0 4px;
+  border-radius: 5px;
+  background: linear-gradient(
+    to right,
+    hsl(0 90% 65%),
+    hsl(60 90% 65%),
+    hsl(120 90% 65%),
+    hsl(180 90% 65%),
+    hsl(240 90% 65%),
+    hsl(300 90% 65%),
+    hsl(360 90% 65%)
+  );
+  cursor: pointer;
+}
+
+.island .hue:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.island .hue::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--island);
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.island .hue::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--island);
+  border-radius: 50%;
+  background: var(--text);
 }
 
 .island .zoom {
