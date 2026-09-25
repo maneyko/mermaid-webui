@@ -380,9 +380,7 @@ export default function Canvas({
     mark(diagram.current, 'connect-target', hovered)
   }, [hovered])
 
-  // The hand tool acts on the canvas rather than on any node, so it rings nothing.
   useEffect(() => {
-    if (tool === 'hand') setHovered(null)
     if (tool !== 'shape') setGhost(null)
   }, [tool])
 
@@ -390,7 +388,6 @@ export default function Canvas({
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTyping(event.target) || event.metaKey || event.ctrlKey || event.altKey) return
       if (event.key === '1' || event.key === 'v' || event.key === 'Escape') setTool('select')
-      if (event.key === 'h') setTool('hand')
       if (event.key === '2' || event.key === 'a') setTool('arrow')
 
       const current = latestSelected.current
@@ -478,7 +475,7 @@ export default function Canvas({
         // labels; the arrow and shape tools drag out from a node, so they ring nodes alone.
         if (tool === 'select') {
           hover(targetAt(event.clientX, event.clientY)?.target ?? null)
-        } else if (tool !== 'hand') {
+        } else {
           const hit = nodeAt(event.clientX, event.clientY)
           hover(nodeTarget(hit))
           // Over a node the ghost snaps below it, joined by the band, so what is on screen is

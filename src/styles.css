@@ -82,11 +82,6 @@ body {
   user-select: none;
 }
 
-.canvas.tool-hand,
-.canvas.tool-hand .diagram g.node {
-  cursor: grab;
-}
-
 .canvas.panning,
 .canvas.panning .diagram g.node {
   cursor: grabbing;

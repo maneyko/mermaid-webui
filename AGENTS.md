@@ -251,8 +251,12 @@ recompute the spans, not carry them across.
 
 ### Tools
 
-- A tool is a mode, Excalidraw-style. `select` clicks, double-clicks and pans; `hand` only
-  pans. Both gates live in `Canvas`, checked at the top of `onClick` and `onDoubleClick`.
+- A tool is a mode, Excalidraw-style. `select` clicks, double-clicks and pans from anywhere,
+  a node included; the others act only on a press that lands on a node and pan otherwise. The
+  gates live in `Canvas`, checked at the top of `onClick` and `onDoubleClick`.
+- **There is no hand tool.** It only ever panned, which `select` already does from any press.
+  If node drags (reorder, reparent) take the press on a node away from panning, the answer is
+  space-and-drag as a momentary override, not a second mode to switch back out of.
 - **The floating chrome must stop click and double-click, not just pointer-down.** It
   originally stopped only pointer-down, so pressing a toolbar button reached the canvas as a
   click on empty space and silently cleared the node selection.
@@ -261,7 +265,7 @@ recompute the spans, not carry them across.
   `contenteditable` -- CodeMirror's editable surface is the last of those. That guard is
   correct and is also why the Delete shortcut needs a button beside it; see Deleting.
 - The whole keyboard, so a new binding can be checked against it: `1`/`v`/`Escape` select,
-  `h` hand, `2`/`a` arrow, `3`-`6` the quick shapes, `Delete`/`Backspace` delete the selection
+  `2`/`a` arrow, `3`-`6` the quick shapes, `Delete`/`Backspace` delete the selection
   and `Enter` renames it, all in `Canvas`; `cmd+Z`/`cmd+shift+Z` in `CodePane`; `cmd+O` and
   `cmd+S` in `App`. Three listeners rather than one because each owns different state, and
   they are only safe apart because none of them handles the same key.

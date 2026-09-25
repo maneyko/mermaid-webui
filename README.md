@@ -106,9 +106,9 @@ viable at all; everything before it was chrome.
       The edit replaces only that label's own span, so the rest of the line comes back
       byte-identical, and a label containing brackets, pipes or quotes is quoted and escaped
       so it round-trips exactly. Enter commits, Escape cancels.
-- [x] **6a. Tools.** A tool picker in the floating island: select (`1` / `v`) and hand
-      (`h`), with `Escape` returning to select. Select clicks and renames; hand only pans.
-      The viewport moved out into `usePanZoom`.
+- [x] **6a. Tools.** A tool picker in the floating island, with `Escape` returning to select
+      (`1` / `v`). Select clicks, renames, and pans from any press, so there is no separate
+      hand tool. The viewport moved out into `usePanZoom`.
 - [x] **6b. Connect two nodes by dragging.** With the arrow tool (`2` / `a`), hovering a node
       rings it; drag from one node to another and a single `A --> B` line is appended,
       indented to match. A dashed rubber band follows the cursor. Dropping on empty canvas —
@@ -123,7 +123,7 @@ viable at all; everything before it was chrome.
       directly, on the reasoning that dragging was the only other thing a click could mean.
       That held until delete existed — see item 10, which took it back. In a shape mode,
       clicking blank canvas creates a standalone node of that shape. Hovering rings whatever
-      a click would act on, under every tool except the hand.
+      a click would act on, under every tool.
 
 - [x] **9. Delete a node.** With a node selected, the trash button in the island — or the
       Delete key — removes it along with every edge that mentioned it, and nothing else. A
